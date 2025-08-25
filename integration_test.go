@@ -167,7 +167,13 @@ func TestErrorHandlingAndRecovery(t *testing.T) {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	serverMgr := server.NewServerManager(cfg)
+	// Use temporary cache directory to avoid interference from existing cache
+	cacheDir := filepath.Join(tempDir, "cache")
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		t.Fatalf("Failed to create cache directory: %v", err)
+	}
+
+	serverMgr := server.NewServerManagerWithCacheDir(cfg, cacheDir)
 
 	// Test loading servers with network error (should fail gracefully)
 	err = serverMgr.LoadServers()

@@ -297,8 +297,8 @@ func TestPingTesterImpl_FormatResultsForTelegram(t *testing.T) {
 		"*Unavailable Server*",
 		"❌ Unavailable",
 		"connection timeout",
-		"1\\.1\\.1\\.1:443", // Should be escaped
-		"8\\.8\\.8\\.8:443", // Should be escaped
+		"1.1.1.1:443",
+		"8.8.8.8:443",
 	}
 
 	for _, element := range expectedElements {

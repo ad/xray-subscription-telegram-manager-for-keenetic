@@ -32,6 +32,19 @@ func NewServerManager(cfg *config.Config) *ServerManager {
 	}
 }
 
+// NewServerManagerWithCacheDir creates a new server manager with custom cache directory
+func NewServerManagerWithCacheDir(cfg *config.Config, cacheDir string) *ServerManager {
+	return &ServerManager{
+		config:             cfg,
+		servers:            make([]types.Server, 0),
+		currentServer:      nil,
+		subscriptionLoader: NewSubscriptionLoaderWithCacheDir(cfg, cacheDir),
+		pingTester:         NewPingTester(cfg),
+		xrayController:     xray.NewXrayController(&configAdapter{cfg}),
+		mutex:              sync.RWMutex{},
+	}
+}
+
 // configAdapter adapts config.Config to implement xray.ConfigProvider interface
 type configAdapter struct {
 	*config.Config

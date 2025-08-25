@@ -38,6 +38,18 @@ func NewSubscriptionLoader(cfg *config.Config) *SubscriptionLoaderImpl {
 	}
 }
 
+// NewSubscriptionLoaderWithCacheDir creates a new subscription loader with custom cache directory
+func NewSubscriptionLoaderWithCacheDir(cfg *config.Config, cacheDir string) *SubscriptionLoaderImpl {
+	return &SubscriptionLoaderImpl{
+		config: cfg,
+		httpClient: &http.Client{
+			Timeout: time.Duration(cfg.PingTimeout) * time.Second,
+		},
+		parser:    NewVlessParser(),
+		cacheFile: filepath.Join(cacheDir, "servers.json"),
+	}
+}
+
 // LoadFromURL fetches server configuration from the subscription URL
 func (sl *SubscriptionLoaderImpl) LoadFromURL() ([]types.Server, error) {
 	sl.mutex.Lock()
