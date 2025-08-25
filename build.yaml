@@ -1,0 +1,110 @@
+# Build configuration for xray-telegram-manager
+# This file defines build targets and their specific configurations
+
+project:
+  name: xray-telegram-manager
+  description: Xray Telegram Manager for Keenetic routers
+  version_source: git # git, file, env
+  output_dir: ./dist
+
+# Build optimization settings
+optimization:
+  ldflags:
+    - "-s"           # Strip symbol table and debug info
+    - "-w"           # Strip DWARF debug info
+  buildflags:
+    - "-trimpath"    # Remove file system paths from executable
+  compress:
+    enabled: true
+    tool: upx
+    flags: ["--best", "--lzma"]
+
+# Target platforms
+targets:
+  # Primary target for Keenetic routers
+  mips-softfloat:
+    goos: linux
+    goarch: mips
+    gomips: softfloat
+    description: "MIPS softfloat (recommended for Keenetic routers)"
+    primary: true
+    
+  mips-hardfloat:
+    goos: linux
+    goarch: mips
+    gomips: hardfloat
+    description: "MIPS hardfloat (some Keenetic models)"
+    
+  # Additional targets for testing and development
+  linux-amd64:
+    goos: linux
+    goarch: amd64
+    description: "Linux AMD64 (for testing)"
+    
+  linux-arm64:
+    goos: linux
+    goarch: arm64
+    description: "Linux ARM64"
+    
+  darwin-amd64:
+    goos: darwin
+    goarch: amd64
+    description: "macOS AMD64"
+    
+  darwin-arm64:
+    goos: darwin
+    goarch: arm64
+    description: "macOS ARM64 (Apple Silicon)"
+
+# Build profiles
+profiles:
+  development:
+    targets: ["linux-amd64", "darwin-amd64", "darwin-arm64"]
+    optimization:
+      enabled: false
+    debug: true
+    
+  production:
+    targets: ["mips-softfloat", "mips-hardfloat"]
+    optimization:
+      enabled: true
+    compress: true
+    checksums: true
+    
+  release:
+    targets: ["mips-softfloat", "mips-hardfloat", "linux-amd64", "linux-arm64"]
+    optimization:
+      enabled: true
+    compress: true
+    checksums: true
+    artifacts: true
+
+# Version information injection
+version:
+  variables:
+    - name: "main.Version"
+      source: git_describe
+    - name: "main.BuildTime"
+      source: timestamp
+      format: "2006-01-02_15:04:05"
+    - name: "main.GoVersion"
+      source: go_version
+    - name: "main.GitCommit"
+      source: git_commit
+    - name: "main.GitBranch"
+      source: git_branch
+
+# Testing configuration
+testing:
+  cross_compile_test: true
+  targets: ["mips-softfloat", "mips-hardfloat"]
+  
+# Deployment settings
+deployment:
+  keenetic:
+    install_path: "/opt/etc/xray-manager"
+    config_path: "/opt/etc/xray-manager/config.json"
+    service_name: "xray-telegram-manager"
+    user: "root"
+    group: "root"
+    permissions: "755"

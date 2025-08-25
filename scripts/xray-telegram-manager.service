@@ -1,0 +1,41 @@
+[Unit]
+Description=Xray Telegram Manager
+Documentation=https://github.com/ad/xray-subscription-telegram-manager-for-keenetic
+After=network.target network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/etc/xray-manager
+ExecStart=/opt/etc/xray-manager/xray-telegram-manager
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=xray-telegram-manager
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/etc/xray-manager
+ReadWritePaths=/opt/etc/xray/configs
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Environment
+Environment=PATH=/opt/bin:/opt/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+Environment=HOME=/opt/etc/xray-manager
+
+[Install]
+WantedBy=multi-user.target
