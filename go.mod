@@ -1,5 +1,5 @@
 module xray-telegram-manager
 
-go 1.25
+go 1.24
 
 require github.com/go-telegram/bot v1.1.5

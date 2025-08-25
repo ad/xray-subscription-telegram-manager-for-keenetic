@@ -38,10 +38,10 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.25'
+        go-version: '1.24'
 
     - name: Cache Go modules
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -78,7 +78,7 @@ jobs:
         sha256sum xray-telegram-manager-${{ matrix.suffix }} > xray-telegram-manager-${{ matrix.suffix }}.sha256
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: xray-telegram-manager-${{ matrix.suffix }}
         path: |
