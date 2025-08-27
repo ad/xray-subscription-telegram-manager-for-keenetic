@@ -67,7 +67,7 @@ echo "📦 Latest version: $VERSION"
 
 # Create directories
 echo "📁 Creating directories..."
-# Clean up incorrectly created directory from previous versions
+# Clean up incorrectly created directory from previous versions  
 rm -rf "$CONFIG_DIR/{logs,scripts}" 2>/dev/null || true
 
 if ! mkdir -p "$CONFIG_DIR/logs" 2>/dev/null || ! mkdir -p "$CONFIG_DIR/scripts" 2>/dev/null; then
@@ -158,15 +158,34 @@ chmod +x "$INSTALL_DIR/xray-telegram-manager"
 if [ -d "scripts" ]; then
     echo "📋 Installing helper scripts..."
     # Ensure the scripts directory exists with proper permissions
-    mkdir -p "$CONFIG_DIR/scripts"
+    if [ ! -d "$CONFIG_DIR/scripts" ]; then
+        echo "🔧 Creating scripts directory..."
+        mkdir -p "$CONFIG_DIR/scripts"
+    fi
+    
+    # Debug: show what we have
+    echo "🔍 Debug: Available files in scripts/:"
+    ls -la scripts/ 2>/dev/null || echo "   (none found)"
+    echo "🔍 Debug: Target directory $CONFIG_DIR/scripts exists: $([ -d "$CONFIG_DIR/scripts" ] && echo "YES" || echo "NO")"
+    
     if cp -r scripts/* "$CONFIG_DIR/scripts/" 2>/dev/null; then
         chmod +x "$CONFIG_DIR/scripts"/*.sh 2>/dev/null || true
         echo "✅ Helper scripts installed"
     else
-        echo "⚠️  Warning: Could not copy helper scripts (permissions issue)"
+        echo "⚠️  Warning: Could not copy helper scripts"
+        echo "🔍 Debug: Trying manual copy..."
+        for file in scripts/*; do
+            if [ -f "$file" ]; then
+                filename=$(basename "$file")
+                echo "   Copying: $filename"
+                cp "$file" "$CONFIG_DIR/scripts/" 2>/dev/null || echo "   Failed: $filename"
+            fi
+        done
     fi
 else
     echo "📋 No helper scripts found in archive"
+    echo "🔍 Debug: Current directory contents:"
+    ls -la . 2>/dev/null || echo "   (cannot list)"
 fi
 
 # Create init script
