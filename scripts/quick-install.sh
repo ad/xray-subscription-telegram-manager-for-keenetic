@@ -67,7 +67,10 @@ echo "📦 Latest version: $VERSION"
 
 # Create directories
 echo "📁 Creating directories..."
-if ! mkdir -p "$CONFIG_DIR"/{logs,scripts} 2>/dev/null; then
+# Clean up incorrectly created directory from previous versions
+rm -rf "$CONFIG_DIR/{logs,scripts}" 2>/dev/null || true
+
+if ! mkdir -p "$CONFIG_DIR/logs" 2>/dev/null || ! mkdir -p "$CONFIG_DIR/scripts" 2>/dev/null; then
     echo "⚠️  Warning: Could not create config directories (trying alternative)"
     mkdir -p "$CONFIG_DIR" 2>/dev/null || true
     mkdir -p "$CONFIG_DIR/logs" 2>/dev/null || true
