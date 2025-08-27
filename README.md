@@ -2,6 +2,8 @@
 
 Менеджер подключений xray с управлением через Telegram Bot для роутеров Keenetic. Позволяет легко переключаться между xray серверами через Telegram интерфейс, тестировать пинг серверов и управлять подключениями удаленно.
 
+> 📋 **Быстрая установка**: см. [INSTALL.md](INSTALL.md) для простых инструкций
+
 ## Возможности
 
 - 🤖 **Telegram Bot интерфейс** - управление через команды и кнопки
@@ -14,18 +16,54 @@
 
 ## Быстрая установка на Keenetic
 
+### Метод 1: Быстрая установка одной командой (рекомендуется)
+
+```bash
+# Автоматическая установка
+curl -fsSL https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | bash
+
+# Или с wget
+wget -qO- https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | bash
+```
+
+После установки отредактируйте конфигурацию:
+```bash
+nano /opt/etc/xray-manager/config.json
+```
+
+### Метод 2: Установка из архива
+
 ### Предварительные требования
 
 1. **Entware установлен** на роутере Keenetic
 2. **SSH доступ** к роутеру
 3. **Xray уже установлен** и настроен (через пакет `xray-core`)
 
+### Выбор архитектуры
+
+Большинство роутеров Keenetic используют **mips-softfloat**. Если автоматическая установка не работает, попробуйте другие варианты:
+
+- **mips-softfloat** - большинство моделей Keenetic (KN-1010, KN-1410, KN-1711, etc.)
+- **mips-hardfloat** - некоторые более новые модели
+- **mipsle-softfloat** - редкие модели с little-endian
+- **mipsle-hardfloat** - очень редкие модели
+
+Чтобы узнать архитектуру вашего роутера:
+```bash
+ssh root@192.168.1.1 "uname -m && cat /proc/cpuinfo | grep cpu"
+```
+
 ### Автоматическая установка
 
 1. **Скачайте готовый релиз** с GitHub:
    ```bash
-   # На вашем компьютере
+   # Архив с бинарным файлом и скриптами (рекомендуется)
    wget https://github.com/ad/xray-subscription-telegram-manager-for-keenetic/releases/latest/download/xray-telegram-manager-mips-softfloat.tar.gz
+   
+   # Альтернативные архитектуры:
+   # wget https://github.com/ad/xray-subscription-telegram-manager-for-keenetic/releases/latest/download/xray-telegram-manager-mips-hardfloat.tar.gz
+   # wget https://github.com/ad/xray-subscription-telegram-manager-for-keenetic/releases/latest/download/xray-telegram-manager-mipsle-softfloat.tar.gz
+   # wget https://github.com/ad/xray-subscription-telegram-manager-for-keenetic/releases/latest/download/xray-telegram-manager-mipsle-hardfloat.tar.gz
    ```
 
 2. **Скопируйте на роутер и установите**:
@@ -36,13 +74,41 @@
    # Подключаемся к роутеру
    ssh root@192.168.1.1
    
-   # Распаковываем и устанавливаем
+   # Распаковываем архив
    cd /tmp
    tar -xzf xray-telegram-manager-mips-softfloat.tar.gz
-   ./scripts/install.sh
+   
+   # Устанавливаем с помощью включенного скрипта (если есть)
+   if [ -f scripts/install.sh ]; then
+     ./scripts/install.sh
+   else
+     # Ручная установка
+     mkdir -p /opt/etc/xray-manager/{logs,scripts}
+     mkdir -p /opt/bin
+     cp xray-telegram-manager /opt/bin/
+     chmod +x /opt/bin/xray-telegram-manager
+   fi
    ```
 
-3. **Настройте конфигурацию**:
+3. **Создайте init скрипт** (если не создался автоматически):
+   ```bash
+   cat > /opt/etc/init.d/S99xray-telegram-manager << 'EOF'
+#!/bin/sh
+
+ENABLED=yes
+PROCS=xray-telegram-manager
+ARGS="-config /opt/etc/xray-manager/config.json"
+PREARGS=""
+DESC=$PROCS
+PATH=/opt/sbin:/opt/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+. /opt/etc/init.d/rc.func
+EOF
+   
+   chmod +x /opt/etc/init.d/S99xray-telegram-manager
+   ```
+
+4. **Настройте конфигурацию**:
    ```bash
    nano /opt/etc/xray-manager/config.json
    ```
@@ -52,10 +118,25 @@
    - `bot_token` - токен бота от @BotFather
    - `subscription_url` - ссылка на вашу подписку VLESS
 
-4. **Запустите сервис**:
+5. **Запустите сервис**:
    ```bash
    /opt/etc/init.d/S99xray-telegram-manager start
    ```
+
+### Метод 3: Ручная установка только бинарного файла
+
+```bash
+# Узнайте последнюю версию на https://github.com/ad/xray-subscription-telegram-manager-for-keenetic/releases
+# Замените v1.0.0 на актуальную версию
+wget https://github.com/ad/xray-subscription-telegram-manager-for-keenetic/releases/download/v1.0.0/xray-telegram-manager-v1.0.0-mips-softfloat
+
+# Скопируйте на роутер
+scp -O xray-telegram-manager-v1.0.0-mips-softfloat root@192.168.1.1:/opt/bin/xray-telegram-manager
+ssh root@192.168.1.1 "chmod +x /opt/bin/xray-telegram-manager"
+
+# Создайте конфигурацию вручную
+ssh root@192.168.1.1 "mkdir -p /opt/etc/xray-manager/logs"
+```
 
 ### Создание Telegram бота
 
@@ -198,6 +279,16 @@ journalctl -u xray-telegram-manager -f
 4. **Не переключаются серверы**:
    - Проверьте путь к конфигу xray (`config_path`)
    - Убедитесь что команда перезапуска xray работает
+
+5. **Бинарный файл не запускается**:
+   - Проверьте архитектуру: `uname -m && cat /proc/cpuinfo | grep cpu`
+   - Попробуйте другую архитектуру (mips-hardfloat, mipsle-softfloat, mipsle-hardfloat)
+   - Убедитесь что файл исполняемый: `chmod +x /opt/bin/xray-telegram-manager`
+   - Проверьте зависимости: `ldd /opt/bin/xray-telegram-manager`
+
+6. **Ошибка "No such file or directory" при запуске**:
+   - Часто означает неправильную архитектуру
+   - Попробуйте: `file /opt/bin/xray-telegram-manager` для проверки типа файла
 
 ### Полное удаление
 

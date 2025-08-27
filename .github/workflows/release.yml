@@ -264,16 +264,28 @@ jobs:
           fi
 
           echo "" >> release_notes.md
+          echo "## Quick Installation" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### One-command installation (recommended):" >> release_notes.md
+          echo "\`\`\`bash" >> release_notes.md
+          echo "curl -fsSL https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | bash" >> release_notes.md
+          echo "\`\`\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Manual installation:" >> release_notes.md
+          echo "1. Download the archive for your router architecture" >> release_notes.md
+          echo "2. Extract and install using included scripts" >> release_notes.md
+          echo "" >> release_notes.md
           echo "## Supported Architectures" >> release_notes.md
-          echo "- MIPS softfloat (most Keenetic routers)" >> release_notes.md
-          echo "- MIPS hardfloat" >> release_notes.md
-          echo "- MIPSLE softfloat" >> release_notes.md
-          echo "- MIPSLE hardfloat" >> release_notes.md
+          echo "- **mips-softfloat** - most Keenetic routers (KN-1010, KN-1410, KN-1711, etc.)" >> release_notes.md
+          echo "- **mips-hardfloat** - some newer models" >> release_notes.md
+          echo "- **mipsle-softfloat** - rare little-endian models" >> release_notes.md
+          echo "- **mipsle-hardfloat** - very rare models" >> release_notes.md
           echo "" >> release_notes.md
           echo "## Installation" >> release_notes.md
-          echo "1. Download the appropriate binary for your router architecture" >> release_notes.md
-          echo "2. Verify the checksum using the provided .sha256 file" >> release_notes.md
-          echo "3. Follow the installation instructions in the README.md" >> release_notes.md
+          echo "1. Download the appropriate archive (.tar.gz) for your router architecture" >> release_notes.md
+          echo "2. Extract the archive - it contains binary, scripts, and sample config" >> release_notes.md
+          echo "3. Run the installation script or follow manual instructions" >> release_notes.md
+          echo "4. Edit configuration file with your bot token and subscription URL" >> release_notes.md
           echo "" >> release_notes.md
           echo "## Checksums" >> release_notes.md
           echo "All binaries include SHA256 and MD5 checksums for verification." >> release_notes.md
@@ -288,8 +300,50 @@ jobs:
           mkdir -p final-assets
           find release-assets -type f -name "xray-telegram-manager-*" -exec cp {} final-assets/ \;
 
-          # Create a combined checksums file
+          # Create tar.gz archives for each architecture
           cd final-assets
+          for arch in mips-softfloat mips-hardfloat mipsle-softfloat mipsle-hardfloat; do
+            if [ -f "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}" ]; then
+              # Create temporary directory for archive contents
+              mkdir -p "archive-${arch}"
+              
+              # Copy binary
+              cp "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}" "archive-${arch}/xray-telegram-manager"
+              
+              # Copy checksums
+              cp "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}.sha256" "archive-${arch}/"
+              cp "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}.md5" "archive-${arch}/"
+              
+              # Copy installation scripts
+              cp -r ../scripts "archive-${arch}/"
+              
+              # Create sample config
+              mkdir -p "archive-${arch}/config"
+              cat > "archive-${arch}/config/config.json.sample" << 'CONFIG_EOF'
+          {
+              "admin_id": 0,
+              "bot_token": "YOUR_BOT_TOKEN_HERE",
+              "config_path": "/opt/etc/xray/configs/04_outbounds.json",
+              "subscription_url": "YOUR_SUBSCRIPTION_URL_HERE",
+              "log_level": "info",
+              "xray_restart_command": "/opt/etc/init.d/S24xray restart",
+              "cache_duration": 3600,
+              "health_check_interval": 300,
+              "ping_timeout": 5
+          }
+          CONFIG_EOF
+              
+              # Create archive
+              tar -czf "xray-telegram-manager-${arch}.tar.gz" -C "archive-${arch}" .
+              
+              # Cleanup
+              rm -rf "archive-${arch}"
+              
+              echo "Created archive: xray-telegram-manager-${arch}.tar.gz"
+            fi
+          done
+
+          # Create a combined checksums file
           echo "# SHA256 Checksums" > CHECKSUMS.txt
           cat *.sha256 >> CHECKSUMS.txt
           echo "" >> CHECKSUMS.txt
