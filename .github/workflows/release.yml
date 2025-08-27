@@ -220,14 +220,10 @@ jobs:
              xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup
 
           # Compress the binary (use backup if compression fails)
-          if ! upx --best --lzma xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}; then
-            echo "UPX compression failed, using uncompressed binary"
-            mv xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup \
-               xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}
-          else
-            echo "UPX compression successful"
-            rm -f xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup
-          fi
+          # TEMPORARY: Disable UPX for MT7621 compatibility
+          echo "UPX compression disabled for MT7621 compatibility"
+          mv xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup \
+             xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}
 
       - name: Generate checksums
         run: |

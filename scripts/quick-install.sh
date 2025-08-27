@@ -31,9 +31,15 @@ else
     exit 1
 fi
 
-# Detect architecture (basic detection)
+# Detect architecture (improved detection for MediaTek MT7621)
 if [ "$(uname -m)" = "mipsel" ]; then
     ARCH="mipsle-softfloat"
+elif grep -q "MediaTek MT7621" /proc/cpuinfo 2>/dev/null; then
+    # MediaTek MT7621 is big-endian MIPS with specific requirements
+    ARCH="mips-softfloat"
+    echo "🔍 Detected MediaTek MT7621 SoC"
+elif [ "$(uname -m)" = "mips" ]; then
+    ARCH="mips-softfloat"
 fi
 
 echo "📋 Detected architecture: $ARCH"
