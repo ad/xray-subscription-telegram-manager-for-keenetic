@@ -128,21 +128,23 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "1.23"
+          cache: false  # Disable automatic caching to prevent conflicts
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: /tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }}
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ matrix.suffix }}-${{ github.run_id }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ matrix.suffix }}-
+      # Temporarily disable Go caching completely to fix conflicts
+      # - name: Cache Go modules
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: /tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }}
+      #     key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ matrix.suffix }}-${{ github.run_id }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ matrix.suffix }}-
 
-      - name: Setup Go cache environment
-        run: |
-          # Set isolated Go cache paths
-          echo "GOCACHE=/tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }}/build" >> $GITHUB_ENV
-          echo "GOMODCACHE=/tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }}/mod" >> $GITHUB_ENV
-          mkdir -p /tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }}/{build,mod}
+      # - name: Setup Go cache environment
+      #   run: |
+      #     # Set isolated Go cache paths
+      #     echo "GOCACHE=/tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }}/build" >> $GITHUB_ENV
+      #     echo "GOMODCACHE=/tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }}/mod" >> $GITHUB_ENV
+      #     mkdir -p /tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }}/{build,mod}
 
       - name: Cache UPX
         id: cache-upx
@@ -170,12 +172,15 @@ jobs:
 
       - name: Download dependencies
         run: |
+          # Clear any existing Go cache completely
+          go clean -cache -modcache || true
+          
           # Create isolated work directory
           mkdir -p /tmp/build-${{ matrix.suffix }}
           cd /tmp/build-${{ matrix.suffix }}
           cp -r $GITHUB_WORKSPACE/* .
           
-          # Download dependencies with isolated cache
+          # Download dependencies fresh every time
           go mod download
 
       - name: Run tests
@@ -251,7 +256,9 @@ jobs:
           # Clean up isolated directories
           rm -rf /tmp/build-${{ matrix.suffix }} 2>/dev/null || true
           rm -rf /tmp/upx-${{ matrix.suffix }}-${{ github.run_id }} 2>/dev/null || true
-          rm -rf /tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }} 2>/dev/null || true
+          
+          # Clean Go caches completely
+          go clean -cache -modcache || true
 
   create-release:
     name: Create Release

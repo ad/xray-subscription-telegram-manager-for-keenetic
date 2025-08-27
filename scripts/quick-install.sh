@@ -31,10 +31,8 @@ fi
 
 # Extract version and download URL
 VERSION=$(echo "$RELEASE_INFO" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
-DOWNLOAD_URL="https://github.com/$REPO/releases/latest/download/xray-telegram-manager-$ARCH.tar.gz"
 
 echo "📦 Latest version: $VERSION"
-echo "🌐 Download URL: $DOWNLOAD_URL"
 
 # Create directories
 echo "📁 Creating directories..."
