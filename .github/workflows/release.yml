@@ -47,10 +47,34 @@ jobs:
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ matrix.suffix }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
+            ${{ runner.os }}-go-${{ matrix.suffix }}-
             ${{ runner.os }}-go-
+
+      - name: Cache UPX
+        id: cache-upx
+        uses: actions/cache@v4
+        with:
+          path: /tmp/upx
+          key: upx-4.2.1
+          restore-keys: upx-
+
+      - name: Install UPX
+        if: steps.cache-upx.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p /tmp/upx
+          cd /tmp
+          wget -q https://github.com/upx/upx/releases/download/v4.2.1/upx-4.2.1-amd64_linux.tar.xz
+          tar -xf upx-4.2.1-amd64_linux.tar.xz
+          cp upx-4.2.1-amd64_linux/upx /tmp/upx/upx
+          chmod +x /tmp/upx/upx
+
+      - name: Add UPX to PATH
+        run: echo "/tmp/upx" >> $GITHUB_PATH
 
       - name: Download dependencies
         run: go mod download
@@ -67,19 +91,29 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           GOMIPS: ${{ matrix.gomips }}
+          CGO_ENABLED: 0
         run: |
           go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
             -o xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }} .
 
       - name: Compress binary with UPX
         run: |
-          # Install UPX for binary compression
-          wget -q https://github.com/upx/upx/releases/download/v4.2.1/upx-4.2.1-amd64_linux.tar.xz
-          tar -xf upx-4.2.1-amd64_linux.tar.xz
-          sudo mv upx-4.2.1-amd64_linux/upx /usr/local/bin/
+          # Verify UPX is available
+          which upx || (echo "UPX not found in PATH" && exit 1)
+          
+          # Create a copy of the binary before compression (as backup)
+          cp xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }} \
+             xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup
 
-          # Compress the binary (skip if compression fails)
-          upx --best --lzma xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }} || echo "UPX compression failed, continuing with uncompressed binary"
+          # Compress the binary (use backup if compression fails)
+          if ! upx --best --lzma xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}; then
+            echo "UPX compression failed, using uncompressed binary"
+            mv xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup \
+               xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}
+          else
+            echo "UPX compression successful"
+            rm -f xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup
+          fi
 
       - name: Generate checksums
         run: |
@@ -94,6 +128,7 @@ jobs:
             xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}
             xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.sha256
             xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.md5
+          retention-days: 1
 
   create-release:
     name: Create Release
@@ -161,7 +196,7 @@ jobs:
           cat *.md5 >> CHECKSUMS.txt
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.VERSION }}
           name: Release ${{ steps.version.outputs.VERSION }}
