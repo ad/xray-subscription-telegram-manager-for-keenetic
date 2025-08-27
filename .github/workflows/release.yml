@@ -335,11 +335,21 @@ jobs:
         run: |
           mkdir -p final-assets
           find release-assets -type f -name "xray-telegram-manager-*" -exec cp {} final-assets/ \;
+          
+          # Debug: List all files
+          echo "=== Debug: All files in release-assets ==="
+          find release-assets -type f -ls
+          echo "=== Debug: All files in final-assets ==="
+          ls -la final-assets/
+          echo "=== Debug: Version is ${{ steps.version.outputs.VERSION }} ==="
 
           # Create tar.gz archives for each architecture
           cd final-assets
           for arch in mips-softfloat mips-hardfloat mipsle-softfloat mipsle-hardfloat; do
+            echo "=== Processing architecture: $arch ==="
             if [ -f "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}" ]; then
+              echo "✅ Found binary for $arch"
+              
               # Create temporary directory for archive contents
               mkdir -p "archive-${arch}"
               
@@ -347,11 +357,16 @@ jobs:
               cp "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}" "archive-${arch}/xray-telegram-manager"
               
               # Copy checksums
-              cp "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}.sha256" "archive-${arch}/"
-              cp "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}.md5" "archive-${arch}/"
+              cp "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}.sha256" "archive-${arch}/" || echo "⚠️ No SHA256 for $arch"
+              cp "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}.md5" "archive-${arch}/" || echo "⚠️ No MD5 for $arch"
               
-              # Copy installation scripts
-              cp -r ../scripts "archive-${arch}/"
+              # Copy installation scripts (check if scripts directory exists)
+              if [ -d "../scripts" ]; then
+                cp -r ../scripts "archive-${arch}/"
+                echo "✅ Copied scripts for $arch"
+              else
+                echo "⚠️ No scripts directory found"
+              fi
               
               # Create sample config
               mkdir -p "archive-${arch}/config"
@@ -375,9 +390,15 @@ jobs:
               # Cleanup
               rm -rf "archive-${arch}"
               
-              echo "Created archive: xray-telegram-manager-${arch}.tar.gz"
+              echo "✅ Created archive: xray-telegram-manager-${arch}.tar.gz"
+            else
+              echo "❌ Binary not found for $arch"
             fi
           done
+
+          # Debug: List final files
+          echo "=== Debug: Final files ==="
+          ls -la *.tar.gz
 
           # Create a combined checksums file
           echo "# SHA256 Checksums" > CHECKSUMS.txt
