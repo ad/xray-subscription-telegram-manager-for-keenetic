@@ -45,43 +45,66 @@ mkdir -p "$INSTALL_DIR"
 echo "⬇️  Downloading release..."
 cd /tmp
 
-# Try to download the primary architecture
-if ! wget -O "xray-telegram-manager-$ARCH.tar.gz" "$DOWNLOAD_URL" 2>/dev/null; then
-    echo "❌ Failed to download for architecture: $ARCH"
-    echo "🔄 Trying alternative architectures..."
+# First try to download tar.gz archive
+DOWNLOAD_URL="https://github.com/$REPO/releases/latest/download/xray-telegram-manager-$ARCH.tar.gz"
+echo "🌐 Trying archive: $DOWNLOAD_URL"
+
+if wget -O "xray-telegram-manager-$ARCH.tar.gz" "$DOWNLOAD_URL" 2>/dev/null; then
+    echo "✅ Downloaded archive for $ARCH"
+    echo "📦 Extracting archive..."
+    tar -xzf "xray-telegram-manager-$ARCH.tar.gz"
     
-    # Try alternative architectures
-    for alt_arch in mips-hardfloat mipsle-softfloat mipsle-hardfloat mips-softfloat; do
-        if [ "$alt_arch" != "$ARCH" ]; then
-            echo "   Trying: $alt_arch"
-            ALT_URL="https://github.com/$REPO/releases/latest/download/xray-telegram-manager-$alt_arch.tar.gz"
-            if wget -O "xray-telegram-manager-$alt_arch.tar.gz" "$ALT_URL" 2>/dev/null; then
-                ARCH="$alt_arch"
-                mv "xray-telegram-manager-$alt_arch.tar.gz" "xray-telegram-manager-$ARCH.tar.gz"
-                echo "✅ Successfully downloaded: $ARCH"
-                break
-            fi
-        fi
-    done
-    
-    # If all failed
-    if [ ! -f "xray-telegram-manager-$ARCH.tar.gz" ]; then
-        echo "❌ Failed to download any release archive"
-        echo "💡 Available alternatives:"
-        echo "   1. Manual download from: https://github.com/$REPO/releases/latest"
-        echo "   2. Check your internet connection"
-        echo "   3. Try manual installation method"
-        exit 1
+    # Check if extract worked
+    if [ -f "xray-telegram-manager" ]; then
+        echo "✅ Archive extraction successful"
+    else
+        echo "❌ Failed to extract binary from archive"
+        rm -f "xray-telegram-manager-$ARCH.tar.gz"
+        ARCHIVE_FAILED=true
     fi
+else
+    ARCHIVE_FAILED=true
 fi
 
-echo "📦 Extracting archive..."
-tar -xzf "xray-telegram-manager-$ARCH.tar.gz"
-
-# Check if extract worked
-if [ ! -f "xray-telegram-manager" ]; then
-    echo "❌ Failed to extract binary from archive"
-    exit 1
+# If archive download failed, try direct binary download
+if [ "$ARCHIVE_FAILED" = "true" ]; then
+    echo "❌ Archive download failed, trying direct binary download..."
+    
+    # Try to download direct binary file
+    BINARY_URL="https://github.com/$REPO/releases/latest/download/xray-telegram-manager-$VERSION-$ARCH"
+    echo "🌐 Trying binary: $BINARY_URL"
+    
+    if wget -O "xray-telegram-manager" "$BINARY_URL" 2>/dev/null; then
+        echo "✅ Downloaded binary for $ARCH"
+        chmod +x "xray-telegram-manager"
+    else
+        echo "❌ Failed to download binary for architecture: $ARCH"
+        echo "🔄 Trying alternative architectures..."
+        
+        # Try alternative architectures
+        for alt_arch in mips-hardfloat mipsle-softfloat mipsle-hardfloat mips-softfloat; do
+            if [ "$alt_arch" != "$ARCH" ]; then
+                echo "   Trying: $alt_arch"
+                ALT_URL="https://github.com/$REPO/releases/latest/download/xray-telegram-manager-$VERSION-$alt_arch"
+                if wget -O "xray-telegram-manager" "$ALT_URL" 2>/dev/null; then
+                    ARCH="$alt_arch"
+                    chmod +x "xray-telegram-manager"
+                    echo "✅ Successfully downloaded: $ARCH"
+                    break
+                fi
+            fi
+        done
+        
+        # If all failed
+        if [ ! -f "xray-telegram-manager" ] || [ ! -x "xray-telegram-manager" ]; then
+            echo "❌ Failed to download any release file"
+            echo "💡 Available alternatives:"
+            echo "   1. Manual download from: https://github.com/$REPO/releases/latest"
+            echo "   2. Check your internet connection"
+            echo "   3. Try manual installation method"
+            exit 1
+        fi
+    fi
 fi
 
 # Install binary
