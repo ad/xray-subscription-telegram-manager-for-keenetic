@@ -130,17 +130,18 @@ jobs:
         with:
           go-version: "1.23"
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ matrix.suffix }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ matrix.suffix }}-
-            ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-
-            ${{ runner.os }}-go-
+      # Temporarily disable Go module caching to isolate tar conflicts
+      # - name: Cache Go modules
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: |
+      #       ~/.cache/go-build
+      #       ~/go/pkg/mod
+      #     key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ matrix.suffix }}-${{ github.run_id }}-${{ github.run_attempt }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ matrix.suffix }}-
+      #       ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-
+      #       ${{ runner.os }}-go-
 
       # Temporarily disable UPX to isolate cache conflicts
       # - name: Cache UPX
@@ -169,10 +170,15 @@ jobs:
 
       - name: Download dependencies
         run: |
+          # Clear any existing Go cache to prevent conflicts
+          go clean -modcache || true
+          
           # Create isolated work directory
           mkdir -p /tmp/build-${{ matrix.suffix }}
           cd /tmp/build-${{ matrix.suffix }}
           cp -r $GITHUB_WORKSPACE/* .
+          
+          # Download dependencies fresh
           go mod download
 
       - name: Run tests
@@ -253,6 +259,9 @@ jobs:
         run: |
           # Clean up isolated build directory
           rm -rf /tmp/build-${{ matrix.suffix }} 2>/dev/null || true
+          
+          # Clean Go module cache to prevent conflicts with next job
+          go clean -modcache || true
 
   create-release:
     name: Create Release
