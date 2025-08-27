@@ -5,13 +5,24 @@
 Скопируйте и выполните эту команду на роутере:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | sh
 ```
 
-Или если curl недоступен:
+Или если curl недоступен/не работает:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | bash
+wget -qO- https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | sh
+```
+
+**Альтернативный способ (если pipe не работает):**
+
+```bash
+# Скачиваем скрипт
+wget https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh
+
+# Делаем исполняемым и запускаем
+chmod +x quick-install.sh
+./quick-install.sh
 ```
 
 ## Метод 2: Загрузка и установка

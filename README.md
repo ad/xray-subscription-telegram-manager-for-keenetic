@@ -20,10 +20,14 @@
 
 ```bash
 # Автоматическая установка
-curl -fsSL https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | sh
 
 # Или с wget
-wget -qO- https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | bash
+wget -qO- https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | sh
+
+# Альтернативный способ (если pipe не работает)
+wget https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh
+chmod +x quick-install.sh && ./quick-install.sh
 ```
 
 После установки отредактируйте конфигурацию:

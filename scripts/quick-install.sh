@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/bin/sh
 
 # Quick installation script for Keenetic routers
-# Usage: curl -fsSL https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | sh
 
 set -e
 
@@ -44,13 +44,36 @@ mkdir -p "$INSTALL_DIR"
 # Download and extract
 echo "⬇️  Downloading release..."
 cd /tmp
-wget -O "xray-telegram-manager-$ARCH.tar.gz" "$DOWNLOAD_URL" || {
-    echo "❌ Failed to download release archive"
-    echo "💡 Available alternatives:"
-    echo "   1. Manual download from: https://github.com/$REPO/releases/latest"
-    echo "   2. Try different architecture: mips-hardfloat, mipsle-softfloat, mipsle-hardfloat"
-    exit 1
-}
+
+# Try to download the primary architecture
+if ! wget -O "xray-telegram-manager-$ARCH.tar.gz" "$DOWNLOAD_URL" 2>/dev/null; then
+    echo "❌ Failed to download for architecture: $ARCH"
+    echo "🔄 Trying alternative architectures..."
+    
+    # Try alternative architectures
+    for alt_arch in mips-hardfloat mipsle-softfloat mipsle-hardfloat mips-softfloat; do
+        if [ "$alt_arch" != "$ARCH" ]; then
+            echo "   Trying: $alt_arch"
+            ALT_URL="https://github.com/$REPO/releases/latest/download/xray-telegram-manager-$alt_arch.tar.gz"
+            if wget -O "xray-telegram-manager-$alt_arch.tar.gz" "$ALT_URL" 2>/dev/null; then
+                ARCH="$alt_arch"
+                mv "xray-telegram-manager-$alt_arch.tar.gz" "xray-telegram-manager-$ARCH.tar.gz"
+                echo "✅ Successfully downloaded: $ARCH"
+                break
+            fi
+        fi
+    done
+    
+    # If all failed
+    if [ ! -f "xray-telegram-manager-$ARCH.tar.gz" ]; then
+        echo "❌ Failed to download any release archive"
+        echo "💡 Available alternatives:"
+        echo "   1. Manual download from: https://github.com/$REPO/releases/latest"
+        echo "   2. Check your internet connection"
+        echo "   3. Try manual installation method"
+        exit 1
+    fi
+fi
 
 echo "📦 Extracting archive..."
 tar -xzf "xray-telegram-manager-$ARCH.tar.gz"
@@ -75,7 +98,7 @@ fi
 
 # Create init script
 echo "🔧 Creating init script..."
-cat > /opt/etc/init.d/S99xray-telegram-manager << 'EOF'
+cat > /opt/etc/init.d/S99xray-telegram-manager << 'INIT_EOF'
 #!/bin/sh
 
 ENABLED=yes
@@ -86,7 +109,7 @@ DESC=$PROCS
 PATH=/opt/sbin:/opt/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 . /opt/etc/init.d/rc.func
-EOF
+INIT_EOF
 
 chmod +x /opt/etc/init.d/S99xray-telegram-manager
 
@@ -96,7 +119,7 @@ if [ ! -f "$CONFIG_DIR/config.json" ]; then
     if [ -f "config/config.json.sample" ]; then
         cp "config/config.json.sample" "$CONFIG_DIR/config.json"
     else
-        cat > "$CONFIG_DIR/config.json" << 'EOF'
+        cat > "$CONFIG_DIR/config.json" << 'CONFIG_EOF'
 {
     "admin_id": 0,
     "bot_token": "YOUR_BOT_TOKEN_HERE",
@@ -108,7 +131,7 @@ if [ ! -f "$CONFIG_DIR/config.json" ]; then
     "health_check_interval": 300,
     "ping_timeout": 5
 }
-EOF
+CONFIG_EOF
     fi
 else
     echo "⚙️  Configuration file already exists, skipping..."
