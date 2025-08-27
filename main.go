@@ -32,7 +32,20 @@ func main() {
 	}
 
 	logLevel := logger.ParseLogLevel(cfg.LogLevel)
-	log := logger.NewLogger(logLevel, os.Stdout)
+
+	// Create logs directory if it doesn't exist
+	logDir := "/opt/etc/xray-manager/logs"
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create log directory: %v\n", err)
+	}
+
+	// Try to create file logger, fallback to stdout
+	logFile := "/opt/etc/xray-manager/logs/app.log"
+	log, err := logger.NewFileLogger(logLevel, logFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create file logger, using stdout: %v\n", err)
+		log = logger.NewLogger(logLevel, os.Stdout)
+	}
 
 	svc, err := service.NewService(cfg, log)
 	if err != nil {
