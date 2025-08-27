@@ -99,7 +99,6 @@ jobs:
     if: always() && !cancelled() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && needs.bump-version.result == 'success'))
 
     strategy:
-      max-parallel: 1  # Force sequential execution to avoid conflicts
       matrix:
         include:
           - goos: linux
@@ -130,55 +129,53 @@ jobs:
         with:
           go-version: "1.23"
 
-      # Temporarily disable Go module caching to isolate tar conflicts
-      # - name: Cache Go modules
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: |
-      #       ~/.cache/go-build
-      #       ~/go/pkg/mod
-      #     key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ matrix.suffix }}-${{ github.run_id }}-${{ github.run_attempt }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ matrix.suffix }}-
-      #       ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-
-      #       ${{ runner.os }}-go-
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: /tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }}
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ matrix.suffix }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ matrix.suffix }}-
 
-      # Temporarily disable UPX to isolate cache conflicts
-      # - name: Cache UPX
-      #   id: cache-upx
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: /tmp/upx-${{ matrix.suffix }}
-      #     key: upx-4.2.1-${{ matrix.suffix }}
-      #     restore-keys: upx-4.2.1-
+      - name: Setup Go cache environment
+        run: |
+          # Set isolated Go cache paths
+          echo "GOCACHE=/tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }}/build" >> $GITHUB_ENV
+          echo "GOMODCACHE=/tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }}/mod" >> $GITHUB_ENV
+          mkdir -p /tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }}/{build,mod}
 
-      # - name: Install UPX
-      #   if: steps.cache-upx.outputs.cache-hit != 'true'
-      #   run: |
-      #     mkdir -p /tmp/upx-${{ matrix.suffix }}
-      #     cd /tmp
-      #     # Use unique filename to avoid conflicts
-      #     wget -q https://github.com/upx/upx/releases/download/v4.2.1/upx-4.2.1-amd64_linux.tar.xz -O upx-${{ matrix.suffix }}.tar.xz
-      #     tar -xf upx-${{ matrix.suffix }}.tar.xz
-      #     cp upx-4.2.1-amd64_linux/upx /tmp/upx-${{ matrix.suffix }}/upx
-      #     chmod +x /tmp/upx-${{ matrix.suffix }}/upx
-      #     # Cleanup
-      #     rm -rf upx-${{ matrix.suffix }}.tar.xz upx-4.2.1-amd64_linux
+      - name: Cache UPX
+        id: cache-upx
+        uses: actions/cache@v4
+        with:
+          path: /tmp/upx-${{ matrix.suffix }}-${{ github.run_id }}
+          key: upx-4.2.1-${{ matrix.suffix }}-${{ github.run_id }}
+          restore-keys: upx-4.2.1-${{ matrix.suffix }}-
 
-      # - name: Add UPX to PATH
-      #   run: echo "/tmp/upx-${{ matrix.suffix }}" >> $GITHUB_PATH
+      - name: Install UPX
+        if: steps.cache-upx.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p /tmp/upx-${{ matrix.suffix }}-${{ github.run_id }}
+          cd /tmp
+          # Use unique filename to avoid conflicts
+          wget -q https://github.com/upx/upx/releases/download/v4.2.1/upx-4.2.1-amd64_linux.tar.xz -O upx-${{ matrix.suffix }}-${{ github.run_id }}.tar.xz
+          tar -xf upx-${{ matrix.suffix }}-${{ github.run_id }}.tar.xz
+          cp upx-4.2.1-amd64_linux/upx /tmp/upx-${{ matrix.suffix }}-${{ github.run_id }}/upx
+          chmod +x /tmp/upx-${{ matrix.suffix }}-${{ github.run_id }}/upx
+          # Cleanup
+          rm -rf upx-${{ matrix.suffix }}-${{ github.run_id }}.tar.xz upx-4.2.1-amd64_linux
+
+      - name: Add UPX to PATH
+        run: echo "/tmp/upx-${{ matrix.suffix }}-${{ github.run_id }}" >> $GITHUB_PATH
 
       - name: Download dependencies
         run: |
-          # Clear any existing Go cache to prevent conflicts
-          go clean -modcache || true
-          
           # Create isolated work directory
           mkdir -p /tmp/build-${{ matrix.suffix }}
           cd /tmp/build-${{ matrix.suffix }}
           cp -r $GITHUB_WORKSPACE/* .
           
-          # Download dependencies fresh
+          # Download dependencies with isolated cache
           go mod download
 
       - name: Run tests
@@ -206,32 +203,26 @@ jobs:
           go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
             -o xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }} .
 
-      # Temporarily disable UPX compression to isolate conflicts
-      # - name: Compress binary with UPX
-      #   run: |
-      #     cd /tmp/build-${{ matrix.suffix }}
-      #     
-      #     # Verify UPX is available
-      #     which upx || (echo "UPX not found in PATH" && exit 1)
-      #     
-      #     # Create a copy of the binary before compression (as backup)
-      #     cp xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }} \
-      #        xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup
-
-      #     # Compress the binary (use backup if compression fails)
-      #     if ! upx --best --lzma xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}; then
-      #       echo "UPX compression failed, using uncompressed binary"
-      #       mv xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup \
-      #          xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}
-      #     else
-      #       echo "UPX compression successful"
-      #       rm -f xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup
-      #     fi
-
-      - name: Skip compression for testing
+      - name: Compress binary with UPX
         run: |
           cd /tmp/build-${{ matrix.suffix }}
-          echo "Skipping UPX compression to isolate cache conflicts"
+          
+          # Verify UPX is available
+          which upx || (echo "UPX not found in PATH" && exit 1)
+          
+          # Create a copy of the binary before compression (as backup)
+          cp xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }} \
+             xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup
+
+          # Compress the binary (use backup if compression fails)
+          if ! upx --best --lzma xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}; then
+            echo "UPX compression failed, using uncompressed binary"
+            mv xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup \
+               xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}
+          else
+            echo "UPX compression successful"
+            rm -f xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup
+          fi
 
       - name: Generate checksums
         run: |
@@ -257,11 +248,10 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          # Clean up isolated build directory
+          # Clean up isolated directories
           rm -rf /tmp/build-${{ matrix.suffix }} 2>/dev/null || true
-          
-          # Clean Go module cache to prevent conflicts with next job
-          go clean -modcache || true
+          rm -rf /tmp/upx-${{ matrix.suffix }}-${{ github.run_id }} 2>/dev/null || true
+          rm -rf /tmp/go-cache-${{ matrix.suffix }}-${{ github.run_id }} 2>/dev/null || true
 
   create-release:
     name: Create Release
