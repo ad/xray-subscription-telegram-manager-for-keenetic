@@ -12,6 +12,25 @@ CONFIG_DIR="/opt/etc/xray-manager"
 
 echo "🚀 Installing Xray Telegram Manager for Keenetic..."
 
+# Check available download tools
+DOWNLOAD_CMD=""
+if command -v curl >/dev/null 2>&1; then
+    DOWNLOAD_CMD="curl -fsSL -o"
+    echo "📡 Using curl"
+elif command -v wget >/dev/null 2>&1; then
+    # Test if wget supports HTTPS
+    if wget --help 2>&1 | grep -q "check-certificate"; then
+        DOWNLOAD_CMD="wget --no-check-certificate -O"
+        echo "📡 Using wget with SSL bypass"
+    else
+        DOWNLOAD_CMD="wget -O"
+        echo "📡 Using basic wget"
+    fi
+else
+    echo "❌ Neither curl nor wget found!"
+    exit 1
+fi
+
 # Detect architecture (basic detection)
 if [ "$(uname -m)" = "mipsel" ]; then
     ARCH="mipsle-softfloat"
@@ -22,7 +41,19 @@ echo "📋 Detected architecture: $ARCH"
 # Get latest release info
 echo "🔍 Getting latest release info..."
 LATEST_URL="https://api.github.com/repos/$REPO/releases/latest"
-RELEASE_INFO=$(wget -qO- "$LATEST_URL" 2>/dev/null || curl -fsSL "$LATEST_URL" 2>/dev/null)
+# Try different methods for BusyBox compatibility
+if echo "$DOWNLOAD_CMD" | grep -q curl; then
+    # For curl
+    RELEASE_INFO=$(curl -fsSL "$LATEST_URL" 2>/dev/null)
+else
+    # For wget, use -qO- for output to stdout
+    RELEASE_INFO=$(wget --no-check-certificate -qO- "$LATEST_URL" 2>/dev/null || wget -qO- "$LATEST_URL" 2>/dev/null)
+fi
+
+# Fallback to wget if curl failed
+if [ -z "$RELEASE_INFO" ] && command -v wget >/dev/null 2>&1; then
+    RELEASE_INFO=$(wget --no-check-certificate -qO- "$LATEST_URL" 2>/dev/null || wget -qO- "$LATEST_URL" 2>/dev/null)
+fi
 
 if [ -z "$RELEASE_INFO" ]; then
     echo "❌ Failed to get release information"
@@ -47,7 +78,7 @@ cd /tmp
 DOWNLOAD_URL="https://github.com/$REPO/releases/latest/download/xray-telegram-manager-$ARCH.tar.gz"
 echo "🌐 Trying archive: $DOWNLOAD_URL"
 
-if wget -O "xray-telegram-manager-$ARCH.tar.gz" "$DOWNLOAD_URL" 2>/dev/null; then
+if $DOWNLOAD_CMD "xray-telegram-manager-$ARCH.tar.gz" "$DOWNLOAD_URL" 2>/dev/null; then
     echo "✅ Downloaded archive for $ARCH"
     echo "📦 Extracting archive..."
     tar -xzf "xray-telegram-manager-$ARCH.tar.gz"
@@ -72,7 +103,7 @@ if [ "$ARCHIVE_FAILED" = "true" ]; then
     BINARY_URL="https://github.com/$REPO/releases/latest/download/xray-telegram-manager-$VERSION-$ARCH"
     echo "🌐 Trying binary: $BINARY_URL"
     
-    if wget -O "xray-telegram-manager" "$BINARY_URL" 2>/dev/null; then
+    if $DOWNLOAD_CMD "xray-telegram-manager" "$BINARY_URL" 2>/dev/null; then
         echo "✅ Downloaded binary for $ARCH"
         chmod +x "xray-telegram-manager"
     else
@@ -84,7 +115,7 @@ if [ "$ARCHIVE_FAILED" = "true" ]; then
             if [ "$alt_arch" != "$ARCH" ]; then
                 echo "   Trying: $alt_arch"
                 ALT_URL="https://github.com/$REPO/releases/latest/download/xray-telegram-manager-$VERSION-$alt_arch"
-                if wget -O "xray-telegram-manager" "$ALT_URL" 2>/dev/null; then
+                if $DOWNLOAD_CMD "xray-telegram-manager" "$ALT_URL" 2>/dev/null; then
                     ARCH="$alt_arch"
                     chmod +x "xray-telegram-manager"
                     echo "✅ Successfully downloaded: $ARCH"
