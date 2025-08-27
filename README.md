@@ -31,7 +31,7 @@
 2. **Скопируйте на роутер и установите**:
    ```bash
    # Копируем архив на роутер
-   scp xray-telegram-manager-mips-softfloat.tar.gz root@192.168.1.1:/tmp/
+   scp -O xray-telegram-manager-mips-softfloat.tar.gz root@192.168.1.1:/tmp/
    
    # Подключаемся к роутеру
    ssh root@192.168.1.1

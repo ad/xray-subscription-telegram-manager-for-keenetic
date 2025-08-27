@@ -21,7 +21,7 @@ func TestSubscriptionLoader_RetryLogic(t *testing.T) {
 		}
 		// Succeed on 3rd attempt
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("dmxlc3M6Ly90ZXN0LXV1aWRAMTkyLjE2OC4xLjE6ODA4MD90eXBlPXRjcCZzZWN1cml0eT1ub25lI1Rlc3QlMjBTZXJ2ZXI=")) // base64 encoded VLESS URL
+		w.Write([]byte("dmxlc3M6Ly9lYzgyYmNhOC0xMDcyLTQ2ODItODIyZi0zMDMwNmFmNDA4ZWFAMTI3LjAuMDM6ODA4MD90eXBlPXRjcCZzZWN1cml0eT1ub25lI1Rlc3QlMjBTZXJ2ZXI=")) // base64 encoded VLESS URL
 	}))
 	defer server.Close()
 
@@ -31,7 +31,7 @@ func TestSubscriptionLoader_RetryLogic(t *testing.T) {
 	cfg := &config.Config{
 		SubscriptionURL: server.URL,
 		CacheDuration:   3600,
-		PingTimeout:     5,
+		PingTimeout:     1,
 	}
 	loader := NewSubscriptionLoader(cfg)
 	loader.cacheFile = cacheFile
@@ -62,7 +62,7 @@ func TestSubscriptionLoader_MaxRetriesExceeded(t *testing.T) {
 	// Create cache file with test data for fallback
 	tempDir := t.TempDir()
 	cacheFile := filepath.Join(tempDir, "servers.json")
-	testServers := `[{"id":"test","name":"Test Server","address":"192.168.1.1","port":8080,"protocol":"vless"}]`
+	testServers := `[{"id":"test","name":"Test Server","address":"127.0.0.3","port":8080,"protocol":"vless"}]`
 	err := os.WriteFile(cacheFile, []byte(testServers), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create cache file: %v", err)
@@ -71,7 +71,7 @@ func TestSubscriptionLoader_MaxRetriesExceeded(t *testing.T) {
 	cfg := &config.Config{
 		SubscriptionURL: server.URL,
 		CacheDuration:   3600,
-		PingTimeout:     5,
+		PingTimeout:     1,
 	}
 	loader := NewSubscriptionLoader(cfg)
 	loader.cacheFile = cacheFile
@@ -104,7 +104,7 @@ func TestSubscriptionLoader_NetworkErrorWithoutCache(t *testing.T) {
 	cfg := &config.Config{
 		SubscriptionURL: server.URL,
 		CacheDuration:   3600,
-		PingTimeout:     5,
+		PingTimeout:     1,
 	}
 	loader := NewSubscriptionLoader(cfg)
 	loader.cacheFile = cacheFile
@@ -134,7 +134,7 @@ func TestSubscriptionLoader_InvalidBase64WithCache(t *testing.T) {
 	// Create cache file with test data for fallback
 	tempDir := t.TempDir()
 	cacheFile := filepath.Join(tempDir, "servers.json")
-	testServers := `[{"id":"test","name":"Test Server","address":"192.168.1.1","port":8080,"protocol":"vless"}]`
+	testServers := `[{"id":"test","name":"Test Server","address":"127.0.0.3","port":8080,"protocol":"vless"}]`
 	err := os.WriteFile(cacheFile, []byte(testServers), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create cache file: %v", err)
@@ -143,7 +143,7 @@ func TestSubscriptionLoader_InvalidBase64WithCache(t *testing.T) {
 	cfg := &config.Config{
 		SubscriptionURL: server.URL,
 		CacheDuration:   3600,
-		PingTimeout:     5,
+		PingTimeout:     1,
 	}
 	loader := NewSubscriptionLoader(cfg)
 	loader.cacheFile = cacheFile
@@ -165,7 +165,7 @@ func TestSubscriptionLoader_InvalidBase64WithCache(t *testing.T) {
 
 func TestSubscriptionLoader_CachePersistence(t *testing.T) {
 	// Test that cache is properly saved and loaded from file system
-	base64Data := "dmxlc3M6Ly90ZXN0LXV1aWRAMTkyLjE2OC4xLjE6ODA4MD90eXBlPXRjcCZzZWN1cml0eT1ub25lI1Rlc3QlMjBTZXJ2ZXI=" // base64 encoded VLESS URL
+	base64Data := "dmxlc3M6Ly9lYzgyYmNhOC0xMDcyLTQ2ODItODIyZi0zMDMwNmFmNDA4ZWFAMTI3LjAuMDM6ODA4MD90eXBlPXRjcCZzZWN1cml0eT1ub25lI1Rlc3QlMjBTZXJ2ZXI=" // base64 encoded VLESS URL
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -179,7 +179,7 @@ func TestSubscriptionLoader_CachePersistence(t *testing.T) {
 	cfg := &config.Config{
 		SubscriptionURL: server.URL,
 		CacheDuration:   3600,
-		PingTimeout:     5,
+		PingTimeout:     1,
 	}
 	loader := NewSubscriptionLoader(cfg)
 	loader.cacheFile = cacheFile
@@ -219,7 +219,7 @@ func TestSubscriptionLoader_CachePersistence(t *testing.T) {
 }
 
 func TestSubscriptionLoader_CacheExpiration(t *testing.T) {
-	base64Data := "dmxlc3M6Ly90ZXN0LXV1aWRAMTkyLjE2OC4xLjE6ODA4MD90eXBlPXRjcCZzZWN1cml0eT1ub25lI1Rlc3QlMjBTZXJ2ZXI="
+	base64Data := "dmxlc3M6Ly9lYzgyYmNhOC0xMDcyLTQ2ODItODIyZi0zMDMwNmFmNDA4ZWFAMTI3LjAuMDM6ODA4MD90eXBlPXRjcCZzZWN1cml0eT1ub25lI1Rlc3QlMjBTZXJ2ZXI="
 
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +235,7 @@ func TestSubscriptionLoader_CacheExpiration(t *testing.T) {
 	cfg := &config.Config{
 		SubscriptionURL: server.URL,
 		CacheDuration:   1, // 1 second cache duration
-		PingTimeout:     5,
+		PingTimeout:     1,
 	}
 	loader := NewSubscriptionLoader(cfg)
 	loader.cacheFile = cacheFile
@@ -261,7 +261,7 @@ func TestSubscriptionLoader_CacheExpiration(t *testing.T) {
 	}
 
 	// Wait for cache to expire
-	time.Sleep(2 * time.Second)
+	time.Sleep(1100 * time.Millisecond)
 
 	// Third load - should fetch from URL again
 	_, err = loader.LoadFromURL()

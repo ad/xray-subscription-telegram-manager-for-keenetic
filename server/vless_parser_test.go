@@ -8,7 +8,7 @@ func TestVlessParser_ParseUrl(t *testing.T) {
 	parser := NewVlessParser()
 
 	// Test VLESS URL from the design document
-	vlessUrl := "vless://b5cedeb2-005b-5f92-a180-6b5ecd7835c4@77.110.102.49:443?type=tcp&security=reality&sni=outlook.office.com&pbk=S4wZdMHggB2Ch5XQFT_tPa_APifySxRllUbSCiYzwzw&sid=156b0c1c&fp=chrome&flow=xtls-rprx-vision&mux=true&concurrency=8#Netherlands 3 🇳🇱 Durev VPN"
+	vlessUrl := "vless://ec82bca8-1072-4682-822f-30306af408ea@127.0.0.1:443?type=tcp&security=reality&sni=outlook.office.com&pbk=TEST&sid=testid&fp=chrome&flow=xtls-rprx-vision&mux=true&concurrency=8#Netherlands"
 
 	config, err := parser.ParseUrl(vlessUrl)
 	if err != nil {
@@ -16,12 +16,12 @@ func TestVlessParser_ParseUrl(t *testing.T) {
 	}
 
 	// Verify parsed values
-	if config.UUID != "b5cedeb2-005b-5f92-a180-6b5ecd7835c4" {
-		t.Errorf("Expected UUID 'b5cedeb2-005b-5f92-a180-6b5ecd7835c4', got '%s'", config.UUID)
+	if config.UUID != "ec82bca8-1072-4682-822f-30306af408ea" {
+		t.Errorf("Expected UUID 'ec82bca8-1072-4682-822f-30306af408ea', got '%s'", config.UUID)
 	}
 
-	if config.Address != "77.110.102.49" {
-		t.Errorf("Expected address '77.110.102.49', got '%s'", config.Address)
+	if config.Address != "127.0.0.1" {
+		t.Errorf("Expected address '127.0.0.1', got '%s'", config.Address)
 	}
 
 	if config.Port != 443 {
@@ -40,12 +40,12 @@ func TestVlessParser_ParseUrl(t *testing.T) {
 		t.Errorf("Expected SNI 'outlook.office.com', got '%s'", config.SNI)
 	}
 
-	if config.PublicKey != "S4wZdMHggB2Ch5XQFT_tPa_APifySxRllUbSCiYzwzw" {
-		t.Errorf("Expected PublicKey 'S4wZdMHggB2Ch5XQFT_tPa_APifySxRllUbSCiYzwzw', got '%s'", config.PublicKey)
+	if config.PublicKey != "TEST" {
+		t.Errorf("Expected PublicKey 'TEST', got '%s'", config.PublicKey)
 	}
 
-	if config.ShortID != "156b0c1c" {
-		t.Errorf("Expected ShortID '156b0c1c', got '%s'", config.ShortID)
+	if config.ShortID != "testid" {
+		t.Errorf("Expected ShortID 'testid', got '%s'", config.ShortID)
 	}
 
 	if config.Fingerprint != "chrome" {
@@ -56,8 +56,8 @@ func TestVlessParser_ParseUrl(t *testing.T) {
 		t.Errorf("Expected Flow 'xtls-rprx-vision', got '%s'", config.Flow)
 	}
 
-	if config.Name != "Netherlands 3 🇳🇱 Durev VPN" {
-		t.Errorf("Expected Name 'Netherlands 3 🇳🇱 Durev VPN', got '%s'", config.Name)
+	if config.Name != "Netherlands" {
+		t.Errorf("Expected Name 'Netherlands', got '%s'", config.Name)
 	}
 }
 
@@ -65,17 +65,17 @@ func TestVlessParser_ToXrayOutbound(t *testing.T) {
 	parser := NewVlessParser()
 
 	config := VlessConfig{
-		UUID:        "b5cedeb2-005b-5f92-a180-6b5ecd7835c4",
-		Address:     "77.110.102.49",
+		UUID:        "ec82bca8-1072-4682-822f-30306af408ea",
+		Address:     "127.0.0.1",
 		Port:        443,
 		Type:        "tcp",
 		Security:    "reality",
 		SNI:         "outlook.office.com",
-		PublicKey:   "S4wZdMHggB2Ch5XQFT_tPa_APifySxRllUbSCiYzwzw",
-		ShortID:     "156b0c1c",
+		PublicKey:   "TEST",
+		ShortID:     "testid",
 		Fingerprint: "chrome",
 		Flow:        "xtls-rprx-vision",
-		Name:        "Netherlands 3 🇳🇱 Durev VPN",
+		Name:        "Netherlands",
 	}
 
 	server, err := parser.ToXrayOutbound(config)
@@ -84,16 +84,16 @@ func TestVlessParser_ToXrayOutbound(t *testing.T) {
 	}
 
 	// Verify server fields
-	if server.Name != "Netherlands 3 🇳🇱 Durev VPN" {
-		t.Errorf("Expected Name 'Netherlands 3 🇳🇱 Durev VPN', got '%s'", server.Name)
+	if server.Name != "Netherlands" {
+		t.Errorf("Expected Name 'Netherlands', got '%s'", server.Name)
 	}
 
 	if server.Protocol != "vless" {
 		t.Errorf("Expected Protocol 'vless', got '%s'", server.Protocol)
 	}
 
-	if server.Address != "77.110.102.49" {
-		t.Errorf("Expected Address '77.110.102.49', got '%s'", server.Address)
+	if server.Address != "127.0.0.1" {
+		t.Errorf("Expected Address '127.0.0.1', got '%s'", server.Address)
 	}
 
 	if server.Port != 443 {
@@ -115,8 +115,8 @@ func TestVlessParser_ToXrayOutbound(t *testing.T) {
 		t.Fatal("users should be a non-empty slice")
 	}
 
-	if users[0]["id"] != "b5cedeb2-005b-5f92-a180-6b5ecd7835c4" {
-		t.Errorf("Expected user ID 'b5cedeb2-005b-5f92-a180-6b5ecd7835c4', got '%v'", users[0]["id"])
+	if users[0]["id"] != "ec82bca8-1072-4682-822f-30306af408ea" {
+		t.Errorf("Expected user ID 'ec82bca8-1072-4682-822f-30306af408ea', got '%v'", users[0]["id"])
 	}
 
 	if users[0]["flow"] != "xtls-rprx-vision" {
@@ -141,8 +141,8 @@ func TestVlessParser_ToXrayOutbound(t *testing.T) {
 		t.Fatal("realitySettings should be a map")
 	}
 
-	if realitySettings["publicKey"] != "S4wZdMHggB2Ch5XQFT_tPa_APifySxRllUbSCiYzwzw" {
-		t.Errorf("Expected publicKey 'S4wZdMHggB2Ch5XQFT_tPa_APifySxRllUbSCiYzwzw', got '%v'", realitySettings["publicKey"])
+	if realitySettings["publicKey"] != "TEST" {
+		t.Errorf("Expected publicKey 'TEST', got '%v'", realitySettings["publicKey"])
 	}
 
 	if realitySettings["serverName"] != "outlook.office.com" {
@@ -182,9 +182,9 @@ func TestVlessParser_ParseUrl_EdgeCases(t *testing.T) {
 		},
 		{
 			name:     "Minimal valid URL",
-			vlessUrl: "vless://test-uuid@example.com:443#Test",
+			vlessUrl: "vless://ec82bca8-1072-4682-822f-30306af408ea@example.com:443#Test",
 			expected: VlessConfig{
-				UUID:    "test-uuid",
+				UUID:    "ec82bca8-1072-4682-822f-30306af408ea",
 				Address: "example.com",
 				Port:    443,
 				Name:    "Test",
@@ -192,9 +192,9 @@ func TestVlessParser_ParseUrl_EdgeCases(t *testing.T) {
 		},
 		{
 			name:     "URL with special characters in name",
-			vlessUrl: "vless://test-uuid@example.com:443#Test%20Server%20🇺🇸",
+			vlessUrl: "vless://ec82bca8-1072-4682-822f-30306af408ea@example.com:443#Test%20Server%20🇺🇸",
 			expected: VlessConfig{
-				UUID:    "test-uuid",
+				UUID:    "ec82bca8-1072-4682-822f-30306af408ea",
 				Address: "example.com",
 				Port:    443,
 				Name:    "Test Server 🇺🇸",
@@ -202,9 +202,9 @@ func TestVlessParser_ParseUrl_EdgeCases(t *testing.T) {
 		},
 		{
 			name:     "URL with IPv6 address",
-			vlessUrl: "vless://test-uuid@[2001:db8::1]:443#IPv6%20Server",
+			vlessUrl: "vless://ec82bca8-1072-4682-822f-30306af408ea@[2001:db8::1]:443#IPv6%20Server",
 			expected: VlessConfig{
-				UUID:    "test-uuid",
+				UUID:    "ec82bca8-1072-4682-822f-30306af408ea",
 				Address: "2001:db8::1", // Go's url.Parse strips the brackets
 				Port:    443,
 				Name:    "IPv6 Server",
@@ -212,9 +212,9 @@ func TestVlessParser_ParseUrl_EdgeCases(t *testing.T) {
 		},
 		{
 			name:     "URL with TLS security",
-			vlessUrl: "vless://test-uuid@example.com:443?type=tcp&security=tls&sni=example.com#TLS%20Server",
+			vlessUrl: "vless://ec82bca8-1072-4682-822f-30306af408ea@example.com:443?type=tcp&security=tls&sni=example.com#TLS%20Server",
 			expected: VlessConfig{
-				UUID:     "test-uuid",
+				UUID:     "ec82bca8-1072-4682-822f-30306af408ea",
 				Address:  "example.com",
 				Port:     443,
 				Type:     "tcp",
@@ -225,9 +225,9 @@ func TestVlessParser_ParseUrl_EdgeCases(t *testing.T) {
 		},
 		{
 			name:     "URL with WebSocket transport",
-			vlessUrl: "vless://test-uuid@example.com:443?type=ws&path=/path&host=example.com#WebSocket%20Server",
+			vlessUrl: "vless://ec82bca8-1072-4682-822f-30306af408ea@example.com:443?type=ws&path=/path&host=example.com#WebSocket%20Server",
 			expected: VlessConfig{
-				UUID:    "test-uuid",
+				UUID:    "ec82bca8-1072-4682-822f-30306af408ea",
 				Address: "example.com",
 				Port:    443,
 				Type:    "ws",
@@ -294,7 +294,7 @@ func TestVlessParser_ToXrayOutbound_EdgeCases(t *testing.T) {
 		{
 			name: "TLS configuration",
 			config: VlessConfig{
-				UUID:     "test-uuid",
+				UUID:     "ec82bca8-1072-4682-822f-30306af408ea",
 				Address:  "example.com",
 				Port:     443,
 				Type:     "tcp",
@@ -313,7 +313,7 @@ func TestVlessParser_ToXrayOutbound_EdgeCases(t *testing.T) {
 		{
 			name: "None security configuration",
 			config: VlessConfig{
-				UUID:     "test-uuid",
+				UUID:     "ec82bca8-1072-4682-822f-30306af408ea",
 				Address:  "example.com",
 				Port:     80,
 				Type:     "tcp",
@@ -328,7 +328,7 @@ func TestVlessParser_ToXrayOutbound_EdgeCases(t *testing.T) {
 		{
 			name: "WebSocket configuration without security",
 			config: VlessConfig{
-				UUID:    "test-uuid",
+				UUID:    "ec82bca8-1072-4682-822f-30306af408ea",
 				Address: "example.com",
 				Port:    443,
 				Type:    "ws",

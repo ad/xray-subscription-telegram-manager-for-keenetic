@@ -17,7 +17,7 @@ func TestNewServerManager(t *testing.T) {
 		XrayRestartCommand:  "echo restart",
 		CacheDuration:       3600,
 		HealthCheckInterval: 300,
-		PingTimeout:         5,
+		PingTimeout:     1,
 	}
 
 	sm := NewServerManager(cfg)
@@ -62,7 +62,7 @@ func TestGetServers(t *testing.T) {
 		XrayRestartCommand:  "echo restart",
 		CacheDuration:       3600,
 		HealthCheckInterval: 300,
-		PingTimeout:         5,
+		PingTimeout:     1,
 	}
 
 	sm := NewServerManager(cfg)
@@ -122,7 +122,7 @@ func TestGetCurrentServer(t *testing.T) {
 		XrayRestartCommand:  "echo restart",
 		CacheDuration:       3600,
 		HealthCheckInterval: 300,
-		PingTimeout:         5,
+		PingTimeout:     1,
 	}
 
 	sm := NewServerManager(cfg)
@@ -176,7 +176,7 @@ func TestGetServerByID(t *testing.T) {
 		XrayRestartCommand:  "echo restart",
 		CacheDuration:       3600,
 		HealthCheckInterval: 300,
-		PingTimeout:         5,
+		PingTimeout:     1,
 	}
 
 	sm := NewServerManager(cfg)
@@ -237,7 +237,7 @@ func TestSetCurrentServer(t *testing.T) {
 		XrayRestartCommand:  "echo restart",
 		CacheDuration:       3600,
 		HealthCheckInterval: 300,
-		PingTimeout:         5,
+		PingTimeout:     1,
 	}
 
 	sm := NewServerManager(cfg)

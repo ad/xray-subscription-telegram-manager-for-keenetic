@@ -28,7 +28,8 @@ func TestValidate(t *testing.T) {
 	// Test valid config
 	config := &Config{
 		AdminID:         123456789,
-		BotToken:        "test_token",
+		BotToken:        "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+		ConfigPath:      "/opt/etc/xray/configs/04_outbounds.json",
 		SubscriptionURL: "https://example.com/config.txt",
 		LogLevel:        "info",
 		PingTimeout:     5,
@@ -47,7 +48,8 @@ func TestValidate(t *testing.T) {
 	// Test invalid log level
 	invalidLogConfig := &Config{
 		AdminID:         123456789,
-		BotToken:        "test_token",
+		BotToken:        "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+		ConfigPath:      "/opt/etc/xray/configs/04_outbounds.json",
 		SubscriptionURL: "https://example.com/config.txt",
 		LogLevel:        "invalid",
 		PingTimeout:     5,
@@ -100,8 +102,9 @@ func TestLoadConfig_EdgeCases(t *testing.T) {
 			name: "Valid minimal config",
 			configData: `{
 				"admin_id": 123456789,
-				"bot_token": "test_token",
-				"subscription_url": "https://example.com/config.txt"
+				"bot_token": "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+				"subscription_url": "https://example.com/config.txt",
+				"config_path": "/opt/etc/xray/configs/04_outbounds.json"
 			}`,
 			expectError: false,
 		},
@@ -109,11 +112,11 @@ func TestLoadConfig_EdgeCases(t *testing.T) {
 			name: "Config with all fields",
 			configData: `{
 				"admin_id": 123456789,
-				"bot_token": "test_token",
+				"bot_token": "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
 				"config_path": "/custom/path/config.json",
 				"subscription_url": "https://example.com/config.txt",
 				"log_level": "debug",
-				"xray_restart_command": "systemctl restart xray",
+				"xray_restart_command": "/opt/etc/init.d/S24xray restart",
 				"cache_duration": 7200,
 				"health_check_interval": 600,
 				"ping_timeout": 10
@@ -124,7 +127,7 @@ func TestLoadConfig_EdgeCases(t *testing.T) {
 			name: "Config with invalid types",
 			configData: `{
 				"admin_id": "not_a_number",
-				"bot_token": "test_token",
+				"bot_token": "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
 				"subscription_url": "https://example.com/config.txt"
 			}`,
 			expectError: true,
@@ -206,7 +209,8 @@ func TestValidate_DetailedCases(t *testing.T) {
 			name: "Valid config",
 			config: Config{
 				AdminID:         123456789,
-				BotToken:        "valid_token",
+				BotToken:        "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+				ConfigPath:      "/opt/etc/xray/configs/04_outbounds.json",
 				SubscriptionURL: "https://example.com/config.txt",
 				LogLevel:        "info",
 				PingTimeout:     5,
@@ -216,7 +220,8 @@ func TestValidate_DetailedCases(t *testing.T) {
 		{
 			name: "Missing AdminID",
 			config: Config{
-				BotToken:        "valid_token",
+				BotToken:        "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+				ConfigPath:      "/opt/etc/xray/configs/04_outbounds.json",
 				SubscriptionURL: "https://example.com/config.txt",
 				LogLevel:        "info",
 				PingTimeout:     5,
@@ -239,7 +244,8 @@ func TestValidate_DetailedCases(t *testing.T) {
 			name: "Missing SubscriptionURL",
 			config: Config{
 				AdminID:     123456789,
-				BotToken:    "valid_token",
+				BotToken:    "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+				ConfigPath:  "/opt/etc/xray/configs/04_outbounds.json",
 				LogLevel:    "info",
 				PingTimeout: 5,
 			},
@@ -250,7 +256,8 @@ func TestValidate_DetailedCases(t *testing.T) {
 			name: "Invalid LogLevel",
 			config: Config{
 				AdminID:         123456789,
-				BotToken:        "valid_token",
+				BotToken:        "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+				ConfigPath:      "/opt/etc/xray/configs/04_outbounds.json",
 				SubscriptionURL: "https://example.com/config.txt",
 				LogLevel:        "invalid_level",
 				PingTimeout:     5,
@@ -262,7 +269,8 @@ func TestValidate_DetailedCases(t *testing.T) {
 			name: "Invalid PingTimeout - zero",
 			config: Config{
 				AdminID:         123456789,
-				BotToken:        "valid_token",
+				BotToken:        "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+				ConfigPath:      "/opt/etc/xray/configs/04_outbounds.json",
 				SubscriptionURL: "https://example.com/config.txt",
 				LogLevel:        "info",
 				PingTimeout:     0,
@@ -274,7 +282,8 @@ func TestValidate_DetailedCases(t *testing.T) {
 			name: "Invalid PingTimeout - negative",
 			config: Config{
 				AdminID:         123456789,
-				BotToken:        "valid_token",
+				BotToken:        "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+				ConfigPath:      "/opt/etc/xray/configs/04_outbounds.json",
 				SubscriptionURL: "https://example.com/config.txt",
 				LogLevel:        "info",
 				PingTimeout:     -1,
@@ -286,7 +295,8 @@ func TestValidate_DetailedCases(t *testing.T) {
 			name: "Invalid CacheDuration - negative",
 			config: Config{
 				AdminID:         123456789,
-				BotToken:        "valid_token",
+				BotToken:        "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+				ConfigPath:      "/opt/etc/xray/configs/04_outbounds.json",
 				SubscriptionURL: "https://example.com/config.txt",
 				LogLevel:        "info",
 				PingTimeout:     5,
@@ -299,7 +309,8 @@ func TestValidate_DetailedCases(t *testing.T) {
 			name: "Invalid HealthCheckInterval - negative",
 			config: Config{
 				AdminID:             123456789,
-				BotToken:            "valid_token",
+				BotToken:            "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+				ConfigPath:          "/opt/etc/xray/configs/04_outbounds.json",
 				SubscriptionURL:     "https://example.com/config.txt",
 				LogLevel:            "info",
 				PingTimeout:         5,
@@ -312,11 +323,11 @@ func TestValidate_DetailedCases(t *testing.T) {
 			name: "Valid config with all optional fields",
 			config: Config{
 				AdminID:             123456789,
-				BotToken:            "valid_token",
-				ConfigPath:          "/custom/path",
+				BotToken:            "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+				ConfigPath:          "/opt/etc/xray/configs/04_outbounds.json",
 				SubscriptionURL:     "https://example.com/config.txt",
 				LogLevel:            "debug",
-				XrayRestartCommand:  "systemctl restart xray",
+				XrayRestartCommand:  "/opt/etc/init.d/S24xray restart",
 				CacheDuration:       7200,
 				HealthCheckInterval: 300,
 				PingTimeout:         10,

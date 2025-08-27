@@ -1,6 +1,4 @@
 package types
-
-// Server represents a proxy server configuration
 type Server struct {
 	ID             string                 `json:"id"`
 	Name           string                 `json:"name"`
@@ -12,21 +10,15 @@ type Server struct {
 	Settings       map[string]interface{} `json:"settings"`
 	StreamSettings map[string]interface{} `json:"streamSettings,omitempty"`
 }
-
-// PingResult represents the result of a ping test
 type PingResult struct {
 	Server    Server
 	Latency   int64 // in milliseconds
 	Available bool
 	Error     error
 }
-
-// XrayConfig represents xray configuration structure
 type XrayConfig struct {
 	Outbounds []XrayOutbound `json:"outbounds"`
 }
-
-// XrayOutbound represents an xray outbound configuration
 type XrayOutbound struct {
 	Tag            string                 `json:"tag"`
 	Protocol       string                 `json:"protocol"`

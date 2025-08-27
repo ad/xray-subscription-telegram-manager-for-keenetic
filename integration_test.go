@@ -26,7 +26,7 @@ func TestEndToEndServerSwitching(t *testing.T) {
 	xrayConfigPath := filepath.Join(tempDir, "xray_config.json")
 
 	// Create mock subscription server
-	vlessUrl := "vless://test-uuid@192.168.1.100:443?type=tcp&security=reality&sni=example.com&pbk=testkey&sid=testid&fp=chrome&flow=xtls-rprx-vision#Test%20Server"
+	vlessUrl := "vless://ec82bca8-1072-4682-822f-30306af408ea@127.0.0.300:443?type=tcp&security=reality&sni=example.com&pbk=testkey&sid=testid&fp=chrome&flow=xtls-rprx-vision#Test%20Server"
 	mockServer := server.CreateMockSubscriptionServer([]string{vlessUrl})
 	defer mockServer.Close()
 
@@ -56,11 +56,11 @@ func TestEndToEndServerSwitching(t *testing.T) {
 	// Create service config
 	configData := map[string]interface{}{
 		"admin_id":             int64(123456789),
-		"bot_token":            "test_token",
+		"bot_token":            "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
 		"config_path":          xrayConfigPath,
 		"subscription_url":     mockServer.URL(),
 		"log_level":            "debug",
-		"xray_restart_command": "echo 'xray restarted'",
+		"xray_restart_command": "/bin/echo xray restarted",
 		"cache_duration":       3600,
 		"ping_timeout":         2,
 	}
@@ -98,8 +98,8 @@ func TestEndToEndServerSwitching(t *testing.T) {
 		t.Errorf("Expected server name 'Test Server', got '%s'", testServer.Name)
 	}
 
-	if testServer.Address != "192.168.1.100" {
-		t.Errorf("Expected server address '192.168.1.100', got '%s'", testServer.Address)
+	if testServer.Address != "127.0.0.300" {
+		t.Errorf("Expected server address '127.0.0.300', got '%s'", testServer.Address)
 	}
 
 	// Test server switching
@@ -117,8 +117,8 @@ func TestEndToEndServerSwitching(t *testing.T) {
 		t.Errorf("Expected current server ID '%s', got '%s'", testServer.ID, currentServer.ID)
 	}
 
-	if currentServer.Address != "192.168.1.100" {
-		t.Errorf("Expected current server address '192.168.1.100', got '%s'", currentServer.Address)
+	if currentServer.Address != "127.0.0.300" {
+		t.Errorf("Expected current server address '127.0.0.300', got '%s'", currentServer.Address)
 	}
 
 	if currentServer.Protocol != "vless" {
@@ -143,11 +143,11 @@ func TestErrorHandlingAndRecovery(t *testing.T) {
 	// Create service config
 	configData := map[string]interface{}{
 		"admin_id":             int64(123456789),
-		"bot_token":            "test_token",
+		"bot_token":            "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
 		"config_path":          xrayConfigPath,
 		"subscription_url":     mockServer.URL(),
 		"log_level":            "debug",
-		"xray_restart_command": "echo 'xray restarted'",
+		"xray_restart_command": "/bin/echo xray restarted",
 		"cache_duration":       3600,
 		"ping_timeout":         1,
 	}
@@ -212,9 +212,9 @@ func TestConcurrentOperations(t *testing.T) {
 
 	// Create mock subscription server with multiple servers
 	vlessUrls := []string{
-		"vless://uuid1@server1.com:443?type=tcp&security=tls#Server%201",
-		"vless://uuid2@server2.com:443?type=tcp&security=tls#Server%202",
-		"vless://uuid3@server3.com:443?type=tcp&security=tls#Server%203",
+		"vless://b5cedeb2-005b-5f92-a180-6b5ecd7835c1@server1.com:443?type=tcp&security=tls#Server%201",
+		"vless://b5cedeb2-005b-5f92-a180-6b5ecd7835c2@server2.com:443?type=tcp&security=tls#Server%202",
+		"vless://b5cedeb2-005b-5f92-a180-6b5ecd7835c3@server3.com:443?type=tcp&security=tls#Server%203",
 	}
 	mockServer := server.CreateMockSubscriptionServer(vlessUrls)
 	defer mockServer.Close()
@@ -241,11 +241,11 @@ func TestConcurrentOperations(t *testing.T) {
 	// Create service config
 	configData := map[string]interface{}{
 		"admin_id":             int64(123456789),
-		"bot_token":            "test_token",
+		"bot_token":            "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
 		"config_path":          xrayConfigPath,
 		"subscription_url":     mockServer.URL(),
 		"log_level":            "info",
-		"xray_restart_command": "echo 'xray restarted'",
+		"xray_restart_command": "/bin/echo xray restarted",
 		"cache_duration":       3600,
 		"ping_timeout":         1,
 	}
@@ -319,7 +319,7 @@ func TestConcurrentOperations(t *testing.T) {
 			// Expected
 		case err := <-errors:
 			t.Errorf("Concurrent operation error: %v", err)
-		case <-time.After(15 * time.Second):
+		case <-time.After(5 * time.Second):
 			t.Fatal("Timeout waiting for concurrent operations to complete")
 		}
 	}
@@ -362,8 +362,8 @@ func TestPingTestingWorkflow(t *testing.T) {
 
 	// Create mock subscription server with test servers
 	vlessUrls := []string{
-		fmt.Sprintf("vless://uuid1@%s:%d?type=tcp&security=none#Available%%20Server", mockTCPServer.Address(), mockTCPServer.Port()),
-		"vless://uuid2@127.0.0.1:65529?type=tcp&security=none#Unavailable%20Server", // Should be unreachable (closed port)
+		fmt.Sprintf("vless://b5cedeb2-005b-5f92-a180-6b5ecd7835c4@%s:%d?type=tcp&security=none#Available%%20Server", mockTCPServer.Address(), mockTCPServer.Port()),
+		"vless://b5cedeb2-005b-5f92-a180-6b5ecd7835c5@127.0.0.1:65529?type=tcp&security=none#Unavailable%20Server", // Should be unreachable (closed port)
 	}
 	mockHTTPServer := server.CreateMockSubscriptionServer(vlessUrls)
 	defer mockHTTPServer.Close()
@@ -371,7 +371,7 @@ func TestPingTestingWorkflow(t *testing.T) {
 	// Create service config
 	configData := map[string]interface{}{
 		"admin_id":         int64(123456789),
-		"bot_token":        "test_token",
+		"bot_token":        "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
 		"subscription_url": mockHTTPServer.URL(),
 		"log_level":        "info",
 		"ping_timeout":     2,
@@ -490,7 +490,7 @@ func TestConfigurationReload(t *testing.T) {
 	// Create initial config
 	initialConfigData := map[string]interface{}{
 		"admin_id":         int64(123456789),
-		"bot_token":        "initial_token",
+		"bot_token":        "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
 		"subscription_url": "https://initial.example.com/config.txt",
 		"log_level":        "info",
 		"ping_timeout":     5,
@@ -512,7 +512,7 @@ func TestConfigurationReload(t *testing.T) {
 	}
 
 	// Verify initial config
-	if cfg.BotToken != "initial_token" {
+	if cfg.BotToken != "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ" {
 		t.Error("Initial bot token should be 'initial_token'")
 	}
 
@@ -527,7 +527,7 @@ func TestConfigurationReload(t *testing.T) {
 	// Update config file
 	updatedConfigData := map[string]interface{}{
 		"admin_id":         int64(123456789),
-		"bot_token":        "updated_token",
+		"bot_token":        "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
 		"subscription_url": "https://updated.example.com/config.txt",
 		"log_level":        "debug",
 		"ping_timeout":     10,
@@ -549,7 +549,7 @@ func TestConfigurationReload(t *testing.T) {
 	}
 
 	// Verify updated config
-	if updatedCfg.BotToken != "updated_token" {
+	if updatedCfg.BotToken != "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ" {
 		t.Error("Bot token should be updated to 'updated_token'")
 	}
 
@@ -580,7 +580,7 @@ func TestServiceLifecycle(t *testing.T) {
 	// Create service config
 	configData := map[string]interface{}{
 		"admin_id":              int64(123456789),
-		"bot_token":             "test_token",
+		"bot_token":             "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
 		"subscription_url":      "https://example.com/config.txt",
 		"log_level":             "info",
 		"health_check_interval": 0, // Disable health checks for this test

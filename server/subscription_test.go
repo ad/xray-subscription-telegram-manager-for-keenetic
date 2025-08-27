@@ -14,14 +14,14 @@ import (
 func TestSubscriptionLoader_DecodeBase64Config(t *testing.T) {
 	cfg := &config.Config{
 		CacheDuration: 3600,
-		PingTimeout:   5,
+		PingTimeout:   1,
 	}
 	loader := NewSubscriptionLoader(cfg)
 
 	// Test data with VLESS URLs
 	vlessUrls := []string{
-		"vless://b5cedeb2-005b-5f92-a180-6b5ecd7835c4@77.110.102.49:443?type=tcp&security=reality&sni=outlook.office.com&pbk=S4wZdMHggB2Ch5XQFT_tPa_APifySxRllUbSCiYzwzw&sid=156b0c1c&fp=chrome&flow=xtls-rprx-vision#Netherlands%203%20🇳🇱%20Durev%20VPN",
-		"vless://test-uuid@192.168.1.1:8080?type=tcp&security=none#Test%20Server",
+		"vless://ec82bca8-1072-4682-822f-30306af408ea@127.0.0.1:443?type=tcp&security=reality&sni=outlook.office.com&pbk=TEST&sid=test&fp=chrome&flow=xtls-rprx-vision#Netherlands",
+		"vless://ec82bca8-1072-4682-822f-30306af408ea@127.0.0.3:8080?type=tcp&security=none#Test%20Server",
 	}
 
 	// Create base64 encoded data
@@ -38,8 +38,8 @@ func TestSubscriptionLoader_DecodeBase64Config(t *testing.T) {
 
 	// Verify first server
 	server1 := servers[0]
-	if server1.Address != "77.110.102.49" {
-		t.Errorf("Expected address '77.110.102.49', got '%s'", server1.Address)
+	if server1.Address != "127.0.0.1" {
+		t.Errorf("Expected address '127.0.0.1', got '%s'", server1.Address)
 	}
 	if server1.Port != 443 {
 		t.Errorf("Expected port 443, got %d", server1.Port)
@@ -50,8 +50,8 @@ func TestSubscriptionLoader_DecodeBase64Config(t *testing.T) {
 
 	// Verify second server
 	server2 := servers[1]
-	if server2.Address != "192.168.1.1" {
-		t.Errorf("Expected address '192.168.1.1', got '%s'", server2.Address)
+	if server2.Address != "127.0.0.3" {
+		t.Errorf("Expected address '127.0.0.3', got '%s'", server2.Address)
 	}
 	if server2.Port != 8080 {
 		t.Errorf("Expected port 8080, got %d", server2.Port)
@@ -60,7 +60,7 @@ func TestSubscriptionLoader_DecodeBase64Config(t *testing.T) {
 
 func TestSubscriptionLoader_LoadFromURL(t *testing.T) {
 	// Create mock HTTP server
-	vlessUrl := "vless://test-uuid@192.168.1.1:8080?type=tcp&security=none#Test%20Server"
+	vlessUrl := "vless://ec82bca8-1072-4682-822f-30306af408ea@127.0.0.3:8080?type=tcp&security=none#Test%20Server"
 	mockServer := CreateMockSubscriptionServer([]string{vlessUrl})
 	defer mockServer.Close()
 
@@ -71,7 +71,7 @@ func TestSubscriptionLoader_LoadFromURL(t *testing.T) {
 	cfg := &config.Config{
 		SubscriptionURL: mockServer.URL(),
 		CacheDuration:   3600,
-		PingTimeout:     5,
+		PingTimeout:     1,
 	}
 	loader := NewSubscriptionLoader(cfg)
 	loader.cacheFile = cacheFile
@@ -87,8 +87,8 @@ func TestSubscriptionLoader_LoadFromURL(t *testing.T) {
 	}
 
 	server1 := servers[0]
-	if server1.Address != "192.168.1.1" {
-		t.Errorf("Expected address '192.168.1.1', got '%s'", server1.Address)
+	if server1.Address != "127.0.0.3" {
+		t.Errorf("Expected address '127.0.0.3', got '%s'", server1.Address)
 	}
 	if server1.Port != 8080 {
 		t.Errorf("Expected port 8080, got %d", server1.Port)
@@ -103,7 +103,7 @@ func TestSubscriptionLoader_LoadFromURL(t *testing.T) {
 func TestSubscriptionLoader_CacheValidation(t *testing.T) {
 	cfg := &config.Config{
 		CacheDuration: 1, // 1 second for quick testing
-		PingTimeout:   5,
+		PingTimeout:   1,
 	}
 	loader := NewSubscriptionLoader(cfg)
 
@@ -117,7 +117,7 @@ func TestSubscriptionLoader_CacheValidation(t *testing.T) {
 	}
 
 	// Wait for cache to expire
-	time.Sleep(2 * time.Second)
+	time.Sleep(1100 * time.Millisecond)
 
 	// Cache should now be invalid
 	if loader.isCacheValid() {
@@ -135,7 +135,7 @@ func TestSubscriptionLoader_FallbackToCache(t *testing.T) {
 	cacheFile := filepath.Join(tempDir, "servers.json")
 
 	// Create cache file with test data
-	testServers := `[{"id":"test","name":"Test Server","address":"192.168.1.1","port":8080,"protocol":"vless"}]`
+	testServers := `[{"id":"test","name":"Test Server","address":"127.0.0.3","port":8080,"protocol":"vless"}]`
 	err := os.WriteFile(cacheFile, []byte(testServers), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create cache file: %v", err)
@@ -144,7 +144,7 @@ func TestSubscriptionLoader_FallbackToCache(t *testing.T) {
 	cfg := &config.Config{
 		SubscriptionURL: mockServer.URL(),
 		CacheDuration:   3600,
-		PingTimeout:     5,
+		PingTimeout:     1,
 	}
 	loader := NewSubscriptionLoader(cfg)
 	loader.cacheFile = cacheFile
@@ -167,7 +167,7 @@ func TestSubscriptionLoader_FallbackToCache(t *testing.T) {
 func TestSubscriptionLoader_InvalidateCache(t *testing.T) {
 	cfg := &config.Config{
 		CacheDuration: 3600,
-		PingTimeout:   5,
+		PingTimeout:   1,
 	}
 	loader := NewSubscriptionLoader(cfg)
 

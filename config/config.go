@@ -3,10 +3,12 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
+	"regexp"
+	"strings"
 )
 
-// Config represents the application configuration
 type Config struct {
 	AdminID             int64  `json:"admin_id"`
 	BotToken            string `json:"bot_token"`
@@ -19,8 +21,11 @@ type Config struct {
 	PingTimeout         int    `json:"ping_timeout"`
 }
 
-// LoadConfig loads configuration from the specified file path
 func LoadConfig(path string) (*Config, error) {
+	if path == "" {
+		return nil, fmt.Errorf("config path cannot be empty")
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
@@ -39,7 +44,6 @@ func LoadConfig(path string) (*Config, error) {
 	return &config, nil
 }
 
-// SetDefaults sets default values for optional configuration fields
 func (c *Config) SetDefaults() {
 	if c.ConfigPath == "" {
 		c.ConfigPath = "/opt/etc/xray/configs/04_outbounds.json"
@@ -51,57 +55,202 @@ func (c *Config) SetDefaults() {
 		c.XrayRestartCommand = "/opt/etc/init.d/S24xray restart"
 	}
 	if c.CacheDuration == 0 {
-		c.CacheDuration = 3600 // 1 hour
+		c.CacheDuration = 3600
 	}
 	if c.HealthCheckInterval == 0 {
-		c.HealthCheckInterval = 300 // 5 minutes
+		c.HealthCheckInterval = 300
 	}
 	if c.PingTimeout == 0 {
-		c.PingTimeout = 5 // 5 seconds
+		c.PingTimeout = 5
 	}
 }
 
-// Validate validates the configuration
 func (c *Config) Validate() error {
 	if c.AdminID == 0 {
-		return fmt.Errorf("admin_id is required")
+		return fmt.Errorf("admin_id is required and must be non-zero")
 	}
+
+	if c.AdminID < 0 {
+		return fmt.Errorf("admin_id must be positive")
+	}
+
+	if err := c.validateBotToken(); err != nil {
+		return fmt.Errorf("invalid bot_token: %w", err)
+	}
+
+	if err := c.validateSubscriptionURL(); err != nil {
+		return fmt.Errorf("invalid subscription_url: %w", err)
+	}
+
+	if err := c.validateConfigPath(); err != nil {
+		return fmt.Errorf("invalid config_path: %w", err)
+	}
+
+	if err := c.validateLogLevel(); err != nil {
+		return fmt.Errorf("invalid log_level: %w", err)
+	}
+
+	if err := c.validateTimeouts(); err != nil {
+		return fmt.Errorf("invalid timeout values: %w", err)
+	}
+
+	if err := c.validateCommand(); err != nil {
+		return fmt.Errorf("invalid xray_restart_command: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Config) validateBotToken() error {
 	if c.BotToken == "" {
 		return fmt.Errorf("bot_token is required")
 	}
+
+	botTokenRegex := regexp.MustCompile(`^\d{8,10}:[A-Za-z0-9_-]{20,}$`)
+	if !botTokenRegex.MatchString(c.BotToken) {
+		return fmt.Errorf("bot_token has invalid format")
+	}
+
+	return nil
+}
+
+func (c *Config) validateSubscriptionURL() error {
 	if c.SubscriptionURL == "" {
 		return fmt.Errorf("subscription_url is required")
 	}
 
-	// Validate log level
+	parsedURL, err := url.Parse(c.SubscriptionURL)
+	if err != nil {
+		return fmt.Errorf("subscription_url is not a valid URL: %w", err)
+	}
+
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return fmt.Errorf("subscription_url must use http or https scheme")
+	}
+
+	if parsedURL.Host == "" {
+		return fmt.Errorf("subscription_url must have a valid host")
+	}
+
+	return nil
+}
+
+func (c *Config) validateConfigPath() error {
+	if c.ConfigPath == "" {
+		c.ConfigPath = "/opt/etc/xray/configs/04_outbounds.json"
+		return nil
+	}
+
+	if !strings.HasPrefix(c.ConfigPath, "/") {
+		return fmt.Errorf("config_path must be an absolute path")
+	}
+
+	if strings.Contains(c.ConfigPath, "..") {
+		return fmt.Errorf("config_path cannot contain '..' path components")
+	}
+
+	return nil
+}
+
+func (c *Config) validateLogLevel() error {
 	validLogLevels := map[string]bool{
 		"debug": true,
 		"info":  true,
 		"warn":  true,
 		"error": true,
 	}
-	if !validLogLevels[c.LogLevel] {
-		return fmt.Errorf("invalid log_level: %s (must be debug, info, warn, or error)", c.LogLevel)
+
+	if !validLogLevels[strings.ToLower(c.LogLevel)] {
+		return fmt.Errorf("log_level must be one of: debug, info, warn, error")
 	}
 
-	// Validate timeout values
+	c.LogLevel = strings.ToLower(c.LogLevel)
+	return nil
+}
+
+func (c *Config) validateTimeouts() error {
 	if c.CacheDuration < 0 {
 		return fmt.Errorf("cache_duration must be non-negative")
 	}
+
 	if c.HealthCheckInterval < 0 {
 		return fmt.Errorf("health_check_interval must be non-negative")
 	}
+
 	if c.PingTimeout <= 0 {
 		return fmt.Errorf("ping_timeout must be positive")
+	}
+
+	if c.PingTimeout > 60 {
+		return fmt.Errorf("ping_timeout cannot exceed 60 seconds")
+	}
+
+	if c.CacheDuration > 86400 {
+		return fmt.Errorf("cache_duration cannot exceed 24 hours (86400 seconds)")
+	}
+
+	if c.HealthCheckInterval > 3600 {
+		return fmt.Errorf("health_check_interval cannot exceed 1 hour (3600 seconds)")
 	}
 
 	return nil
 }
 
-// CreateTemplate creates a template configuration file at the specified path
+func (c *Config) validateCommand() error {
+	if c.XrayRestartCommand == "" {
+		c.XrayRestartCommand = "/opt/etc/init.d/S24xray restart"
+		return nil
+	}
+
+	dangerousChars := []string{";", "&", "|", "`", "$", "(", ")", "<", ">", "\"", "'", "\\"}
+	for _, char := range dangerousChars {
+		if strings.Contains(c.XrayRestartCommand, char) {
+			return fmt.Errorf("xray_restart_command contains potentially dangerous character: %s", char)
+		}
+	}
+
+	parts := strings.Fields(c.XrayRestartCommand)
+	if len(parts) == 0 {
+		return fmt.Errorf("xray_restart_command cannot be empty")
+	}
+
+	if !strings.HasPrefix(parts[0], "/") {
+		return fmt.Errorf("xray_restart_command must start with an absolute path")
+	}
+
+	if len(c.XrayRestartCommand) > 256 {
+		return fmt.Errorf("xray_restart_command too long (max 256 characters)")
+	}
+
+	allowedCommands := []string{
+		"/opt/etc/init.d/S24xray",
+		"/bin/systemctl",
+		"/usr/bin/systemctl",
+		"/sbin/service",
+		"/usr/sbin/service",
+		"/etc/init.d/xray",
+		"/bin/echo",
+		"/usr/bin/echo",
+	}
+
+	commandAllowed := false
+	for _, allowed := range allowedCommands {
+		if strings.HasPrefix(parts[0], allowed) {
+			commandAllowed = true
+			break
+		}
+	}
+
+	if !commandAllowed {
+		return fmt.Errorf("xray_restart_command uses non-whitelisted command: %s", parts[0])
+	}
+
+	return nil
+}
+
 func CreateTemplate(path string) error {
 	template := Config{
-		AdminID:             0, // User must fill this
+		AdminID:             0,
 		BotToken:            "your_bot_token_here",
 		ConfigPath:          "/opt/etc/xray/configs/04_outbounds.json",
 		SubscriptionURL:     "https://example.com/config.txt",
@@ -124,27 +273,21 @@ func CreateTemplate(path string) error {
 	return nil
 }
 
-// LoadConfigOrCreateTemplate loads configuration from file, or creates a template if file doesn't exist
 func LoadConfigOrCreateTemplate(path string) (*Config, error) {
-	// Check if config file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		// Create template config file
 		if err := CreateTemplate(path); err != nil {
 			return nil, fmt.Errorf("failed to create template config: %w", err)
 		}
 		return nil, fmt.Errorf("config file not found, created template at %s - please fill in required fields (admin_id, bot_token, subscription_url)", path)
 	}
 
-	// Load existing config
 	return LoadConfig(path)
 }
 
-// GetAdminID returns the admin ID for the ConfigProvider interface
 func (c *Config) GetAdminID() int64 {
 	return c.AdminID
 }
 
-// GetBotToken returns the bot token for the ConfigProvider interface
 func (c *Config) GetBotToken() string {
 	return c.BotToken
 }

@@ -11,7 +11,7 @@ import (
 
 func TestNewPingTester(t *testing.T) {
 	cfg := &config.Config{
-		PingTimeout: 5,
+		PingTimeout:     1,
 	}
 
 	pt := NewPingTester(cfg)
@@ -508,7 +508,7 @@ func TestPingTesterImpl_TestServer_WithMockServer(t *testing.T) {
 	mockServer.Start()
 
 	cfg := &config.Config{
-		PingTimeout: 5,
+		PingTimeout:     1,
 	}
 	pt := NewPingTester(cfg)
 

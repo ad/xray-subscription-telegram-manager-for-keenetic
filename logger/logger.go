@@ -6,10 +6,10 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
-// LogLevel represents the logging level
 type LogLevel int
 
 const (
@@ -19,7 +19,6 @@ const (
 	ERROR
 )
 
-// String returns the string representation of the log level
 func (l LogLevel) String() string {
 	switch l {
 	case DEBUG:
@@ -35,9 +34,8 @@ func (l LogLevel) String() string {
 	}
 }
 
-// ParseLogLevel parses a string into a LogLevel
 func ParseLogLevel(level string) LogLevel {
-	switch strings.ToUpper(level) {
+	switch strings.ToUpper(strings.TrimSpace(level)) {
 	case "DEBUG":
 		return DEBUG
 	case "INFO":
@@ -51,13 +49,13 @@ func ParseLogLevel(level string) LogLevel {
 	}
 }
 
-// Logger provides structured logging functionality
 type Logger struct {
 	level  LogLevel
 	logger *log.Logger
+	mutex  sync.Mutex
+	output io.Writer
 }
 
-// NewLogger creates a new logger instance
 func NewLogger(level LogLevel, output io.Writer) *Logger {
 	if output == nil {
 		output = os.Stdout
@@ -65,52 +63,150 @@ func NewLogger(level LogLevel, output io.Writer) *Logger {
 
 	return &Logger{
 		level:  level,
-		logger: log.New(output, "", 0), // We'll handle our own formatting
+		logger: log.New(output, "", 0),
+		mutex:  sync.Mutex{},
+		output: output,
 	}
 }
 
-// NewFileLogger creates a logger that writes to a file
 func NewFileLogger(level LogLevel, filename string) (*Logger, error) {
-	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if filename == "" {
+		return nil, fmt.Errorf("filename cannot be empty")
+	}
+
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open log file: %w", err)
 	}
 
-	return NewLogger(level, file), nil
+	return &Logger{
+		level:  level,
+		logger: log.New(file, "", 0),
+		mutex:  sync.Mutex{},
+		output: file,
+	}, nil
 }
 
-// Debug logs a debug message
+func (l *Logger) SetLevel(level LogLevel) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	l.level = level
+}
+
+func (l *Logger) GetLevel() LogLevel {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	return l.level
+}
+
 func (l *Logger) Debug(msg string, args ...interface{}) {
-	if l.level <= DEBUG {
-		l.log(DEBUG, msg, args...)
+	if l == nil {
+		return
 	}
+	l.logSafe(DEBUG, msg, args...)
 }
 
-// Info logs an info message
 func (l *Logger) Info(msg string, args ...interface{}) {
-	if l.level <= INFO {
-		l.log(INFO, msg, args...)
+	if l == nil {
+		return
 	}
+	l.logSafe(INFO, msg, args...)
 }
 
-// Warn logs a warning message
 func (l *Logger) Warn(msg string, args ...interface{}) {
-	if l.level <= WARN {
-		l.log(WARN, msg, args...)
+	if l == nil {
+		return
 	}
+	l.logSafe(WARN, msg, args...)
 }
 
-// Error logs an error message
 func (l *Logger) Error(msg string, args ...interface{}) {
-	if l.level <= ERROR {
-		l.log(ERROR, msg, args...)
+	if l == nil {
+		return
+	}
+	l.logSafe(ERROR, msg, args...)
+}
+
+func (l *Logger) logSafe(level LogLevel, msg string, args ...interface{}) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if l.level <= level {
+		l.logUnsafe(level, msg, args...)
 	}
 }
 
-// log formats and writes a log message
-func (l *Logger) log(level LogLevel, msg string, args ...interface{}) {
-	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	formattedMsg := fmt.Sprintf(msg, args...)
+func (l *Logger) logUnsafe(level LogLevel, msg string, args ...interface{}) {
+	if l.logger == nil {
+		return
+	}
+
+	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
+
+	var formattedMsg string
+	if len(args) > 0 {
+		formattedMsg = fmt.Sprintf(msg, args...)
+	} else {
+		formattedMsg = msg
+	}
+
 	logLine := fmt.Sprintf("[%s] %s: %s", timestamp, level.String(), formattedMsg)
 	l.logger.Println(logLine)
+}
+
+func (l *Logger) Close() error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if file, ok := l.output.(*os.File); ok && file != os.Stdout && file != os.Stderr {
+		return file.Close()
+	}
+	return nil
+}
+
+func (l *Logger) WithFields(fields map[string]interface{}) *FieldLogger {
+	return &FieldLogger{
+		logger: l,
+		fields: fields,
+	}
+}
+
+type FieldLogger struct {
+	logger *Logger
+	fields map[string]interface{}
+}
+
+func (fl *FieldLogger) Debug(msg string, args ...interface{}) {
+	fl.logWithFields(DEBUG, msg, args...)
+}
+
+func (fl *FieldLogger) Info(msg string, args ...interface{}) {
+	fl.logWithFields(INFO, msg, args...)
+}
+
+func (fl *FieldLogger) Warn(msg string, args ...interface{}) {
+	fl.logWithFields(WARN, msg, args...)
+}
+
+func (fl *FieldLogger) Error(msg string, args ...interface{}) {
+	fl.logWithFields(ERROR, msg, args...)
+}
+
+func (fl *FieldLogger) logWithFields(level LogLevel, msg string, args ...interface{}) {
+	var formattedMsg string
+	if len(args) > 0 {
+		formattedMsg = fmt.Sprintf(msg, args...)
+	} else {
+		formattedMsg = msg
+	}
+
+	if len(fl.fields) > 0 {
+		var fieldParts []string
+		for key, value := range fl.fields {
+			fieldParts = append(fieldParts, fmt.Sprintf("%s=%v", key, value))
+		}
+		formattedMsg = fmt.Sprintf("%s [%s]", formattedMsg, strings.Join(fieldParts, " "))
+	}
+
+	fl.logger.logSafe(level, "%s", formattedMsg)
 }
