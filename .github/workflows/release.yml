@@ -4,14 +4,98 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'minor'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      prerelease:
+        description: 'Create as prerelease'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
 
 jobs:
+  bump-version:
+    name: Bump Version
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    outputs:
+      new_tag: ${{ steps.bump.outputs.new_tag }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Get latest tag and bump version
+        id: bump
+        run: |
+          # Get the latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+          
+          # Remove 'v' prefix and split version
+          VERSION=${LATEST_TAG#v}
+          IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
+          
+          MAJOR=${VERSION_PARTS[0]:-0}
+          MINOR=${VERSION_PARTS[1]:-0}
+          PATCH=${VERSION_PARTS[2]:-0}
+          
+          echo "Current version: $MAJOR.$MINOR.$PATCH"
+          
+          # Bump version based on input
+          case "${{ github.event.inputs.version_type }}" in
+            "major")
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            "minor")
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            "patch")
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+          
+          NEW_VERSION="v$MAJOR.$MINOR.$PATCH"
+          
+          # Add prerelease suffix if requested
+          if [ "${{ github.event.inputs.prerelease }}" = "true" ]; then
+            NEW_VERSION="$NEW_VERSION-rc.$(date +%Y%m%d%H%M%S)"
+          fi
+          
+          echo "New version: $NEW_VERSION"
+          echo "new_tag=$NEW_VERSION" >> $GITHUB_OUTPUT
+          
+          # Create and push tag
+          git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
+          git push origin "$NEW_VERSION"
+
   build-and-release:
     name: Build and Release
     runs-on: ubuntu-latest
+    needs: [bump-version]
+    if: always() && !cancelled() && (github.event_name == 'push' || needs.bump-version.result == 'success')
 
     strategy:
       matrix:
@@ -42,7 +126,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.24"
+          go-version: "1.23"
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -82,9 +166,14 @@ jobs:
       - name: Run tests
         run: go test -v ./...
 
-      - name: Extract version from tag
+      - name: Extract version from tag or manual input
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ needs.bump-version.outputs.new_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Build binary
         env:
@@ -133,7 +222,8 @@ jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: build-and-release
+    needs: [build-and-release, bump-version]
+    if: always() && !cancelled() && needs.build-and-release.result == 'success'
 
     steps:
       - name: Checkout code
@@ -141,25 +231,36 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract version from tag
+      - name: Extract version from tag or manual input
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ needs.bump-version.outputs.new_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Generate release notes
         id: release_notes
         run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          
           # Get the previous tag
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
 
           # Generate release notes
-          if [ -n "$PREVIOUS_TAG" ]; then
+          if [ -n "$PREVIOUS_TAG" ] && [ "$PREVIOUS_TAG" != "$VERSION" ]; then
             echo "## Changes since $PREVIOUS_TAG" > release_notes.md
             echo "" >> release_notes.md
             git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD >> release_notes.md
           else
-            echo "## Initial Release" > release_notes.md
+            echo "## Release $VERSION" > release_notes.md
             echo "" >> release_notes.md
-            echo "First release of Xray Telegram Manager for Keenetic routers." >> release_notes.md
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "Manual release created with version bump: **${{ github.event.inputs.version_type }}**" >> release_notes.md
+              echo "" >> release_notes.md
+            fi
+            echo "Xray Telegram Manager for Keenetic routers." >> release_notes.md
           fi
 
           echo "" >> release_notes.md
@@ -195,6 +296,21 @@ jobs:
           echo "# MD5 Checksums" >> CHECKSUMS.txt
           cat *.md5 >> CHECKSUMS.txt
 
+      - name: Determine if prerelease
+        id: prerelease
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "is_prerelease=${{ github.event.inputs.prerelease }}" >> $GITHUB_OUTPUT
+          else
+            # Check if version contains prerelease indicators
+            if [[ "$VERSION" =~ -(alpha|beta|rc|dev) ]]; then
+              echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            else
+              echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -202,7 +318,7 @@ jobs:
           name: Release ${{ steps.version.outputs.VERSION }}
           body_path: release_notes.md
           draft: false
-          prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
           files: |
             final-assets/*
           generate_release_notes: false
@@ -213,6 +329,12 @@ jobs:
         run: |
           echo "## Release ${{ steps.version.outputs.VERSION }} Created Successfully! 🎉" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "### Manual Release Info:" >> $GITHUB_STEP_SUMMARY
+            echo "- Version bump type: **${{ github.event.inputs.version_type }}**" >> $GITHUB_STEP_SUMMARY
+            echo "- Prerelease: **${{ github.event.inputs.prerelease }}**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "### Binaries Built:" >> $GITHUB_STEP_SUMMARY
           echo "- xray-telegram-manager-${{ steps.version.outputs.VERSION }}-mips-softfloat" >> $GITHUB_STEP_SUMMARY
           echo "- xray-telegram-manager-${{ steps.version.outputs.VERSION }}-mips-hardfloat" >> $GITHUB_STEP_SUMMARY
