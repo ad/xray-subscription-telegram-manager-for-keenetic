@@ -67,8 +67,18 @@ echo "📦 Latest version: $VERSION"
 
 # Create directories
 echo "📁 Creating directories..."
-mkdir -p "$CONFIG_DIR"/{logs,scripts}
-mkdir -p "$INSTALL_DIR"
+if ! mkdir -p "$CONFIG_DIR"/{logs,scripts} 2>/dev/null; then
+    echo "⚠️  Warning: Could not create config directories (trying alternative)"
+    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+    mkdir -p "$CONFIG_DIR/logs" 2>/dev/null || true
+    mkdir -p "$CONFIG_DIR/scripts" 2>/dev/null || true
+fi
+
+if ! mkdir -p "$INSTALL_DIR" 2>/dev/null; then
+    echo "❌ Cannot create install directory: $INSTALL_DIR"
+    echo "💡 Try running with sudo or check permissions"
+    exit 1
+fi
 
 # Download and extract
 echo "⬇️  Downloading release..."
@@ -144,8 +154,16 @@ chmod +x "$INSTALL_DIR/xray-telegram-manager"
 # Install scripts if they exist
 if [ -d "scripts" ]; then
     echo "📋 Installing helper scripts..."
-    cp -r scripts/* "$CONFIG_DIR/scripts/"
-    chmod +x "$CONFIG_DIR/scripts"/*.sh 2>/dev/null || true
+    # Ensure the scripts directory exists with proper permissions
+    mkdir -p "$CONFIG_DIR/scripts"
+    if cp -r scripts/* "$CONFIG_DIR/scripts/" 2>/dev/null; then
+        chmod +x "$CONFIG_DIR/scripts"/*.sh 2>/dev/null || true
+        echo "✅ Helper scripts installed"
+    else
+        echo "⚠️  Warning: Could not copy helper scripts (permissions issue)"
+    fi
+else
+    echo "📋 No helper scripts found in archive"
 fi
 
 # Create init script
