@@ -538,13 +538,12 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 
 		count := 0
 		maxQuickSelect := min(10, availableCount)
-		var quickSelectRow []models.InlineKeyboardButton
 
 		for _, result := range results {
 			if result.Available && count < maxQuickSelect {
 				serverName := result.Server.Name
-				if len(serverName) > 12 {
-					serverName = serverName[:9] + "..."
+				if len(serverName) > 20 {
+					serverName = serverName[:17] + "..."
 				}
 
 				status := ""
@@ -554,16 +553,15 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 					status = fmt.Sprintf("%dms", result.Latency)
 				}
 
-				quickSelectRow = append(quickSelectRow, models.InlineKeyboardButton{
-					Text:         fmt.Sprintf("%s (%s)", serverName, status),
-					CallbackData: fmt.Sprintf("server_%s", result.Server.ID),
+				// Each server button on its own row
+				keyboardRows = append(keyboardRows, []models.InlineKeyboardButton{
+					{
+						Text:         fmt.Sprintf("%s (%s)", serverName, status),
+						CallbackData: fmt.Sprintf("server_%s", result.Server.ID),
+					},
 				})
 				count++
 			}
-		}
-
-		if len(quickSelectRow) > 0 {
-			keyboardRows = append(keyboardRows, quickSelectRow)
 		}
 
 		// Add separator
