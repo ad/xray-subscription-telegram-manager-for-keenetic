@@ -31,15 +31,18 @@ else
     exit 1
 fi
 
-# Detect architecture (improved detection for MediaTek MT7621)
+# Detect architecture (enhanced detection for MediaTek MT7621)
+ARCH="mips-softfloat"  # Default for most Keenetic routers
 if [ "$(uname -m)" = "mipsel" ]; then
     ARCH="mipsle-softfloat"
-elif grep -q "MediaTek MT7621" /proc/cpuinfo 2>/dev/null; then
-    # MediaTek MT7621 is big-endian MIPS with specific requirements
-    ARCH="mips-softfloat"
-    echo "🔍 Detected MediaTek MT7621 SoC"
 elif [ "$(uname -m)" = "mips" ]; then
-    ARCH="mips-softfloat"
+    # Check for MediaTek MT7621 - prefer mipsle-softfloat
+    if grep -q "MT7621" /proc/cpuinfo 2>/dev/null; then
+        ARCH="mipsle-softfloat"
+        echo "� Detected MediaTek MT7621 - using mipsle-softfloat"
+    else
+        ARCH="mips-softfloat"
+    fi
 fi
 
 echo "📋 Detected architecture: $ARCH"
