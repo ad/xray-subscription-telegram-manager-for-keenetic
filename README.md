@@ -16,10 +16,12 @@
 
 ## Быстрая установка на Keenetic
 
+> ✅ **Протестировано на MediaTek MT7621** - работает без проблем!
+
 ### Метод 1: Быстрая установка одной командой (рекомендуется)
 
 ```bash
-# Автоматическая установка
+# Автоматическая установка одной командой (работает на всех роутерах Keenetic)
 curl -fsSL https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | sh
 
 # Или с wget
@@ -27,6 +29,7 @@ wget -qO- https://raw.githubusercontent.com/ad/xray-subscription-telegram-manage
 
 # Альтернативный способ (если pipe не работает)
 wget https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh
+chmod +x quick-install.sh && ./quick-install.shttps://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh
 chmod +x quick-install.sh && ./quick-install.sh
 ```
 
