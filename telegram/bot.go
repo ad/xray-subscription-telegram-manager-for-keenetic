@@ -537,7 +537,7 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 		})
 
 		count := 0
-		maxQuickSelect := min(3, availableCount)
+		maxQuickSelect := min(10, availableCount)
 		var quickSelectRow []models.InlineKeyboardButton
 
 		for _, result := range results {
