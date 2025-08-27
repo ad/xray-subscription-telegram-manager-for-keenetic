@@ -1,25 +1,12 @@
 #!/bin/sh
 
-# Quick installation s# Detect architecture (enhanced detection for MediaTek MT7621)
-ARCH="mipsle-softfloat"  # Default for MediaTek MT7621 (most common)
-if [ "$(uname -m)" = "mipsel" ]; then
-    ARCH="mipsle-softfloat"
-elif [ "$(uname -m)" = "mips" ]; then
-    # Check for MediaTek MT7621 - prefer mipsle-softfloat
-    if grep -q "MT7621" /proc/cpuinfo 2>/dev/null; then
-        ARCH="mipsle-softfloat"
-        echo "🔧 Detected MediaTek MT7621 - using mipsle-softfloat"
-    else
-        # For other MIPS, try mipsle-softfloat first (more likely to work)
-        ARCH="mipsle-softfloat"
-    fi
-finetic routers
+# Quick installation script for Keenetic routers
 # Usage: curl -fsSL https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh | sh
 
 set -e
 
 REPO="ad/xray-subscription-telegram-manager-for-keenetic"
-ARCH="mips-softfloat"  # Default for most Keenetic routers
+ARCH="mipsle-softfloat"  # Default for MediaTek MT7621 (most common)
 INSTALL_DIR="/opt/bin"
 CONFIG_DIR="/opt/etc/xray-manager"
 
@@ -145,8 +132,8 @@ if [ "$ARCHIVE_FAILED" = "true" ]; then
         echo "❌ Failed to download binary for architecture: $ARCH"
         echo "🔄 Trying alternative architectures..."
         
-        # Try alternative architectures (prefer mipsle variants for MT7621)
-        for alt_arch in mipsle-hardfloat mipsle-softfloat mips-hardfloat mips-softfloat; do
+        # Try alternative architectures
+        for alt_arch in mips-hardfloat mipsle-softfloat mipsle-hardfloat mips-softfloat; do
             if [ "$alt_arch" != "$ARCH" ]; then
                 echo "   Trying: $alt_arch"
                 ALT_URL="https://github.com/$REPO/releases/latest/download/xray-telegram-manager-$VERSION-$alt_arch"
