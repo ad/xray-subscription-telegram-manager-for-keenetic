@@ -33,3 +33,4 @@ go.work.sum
 
 config.json
 dist/
+test-binary

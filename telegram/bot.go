@@ -527,16 +527,60 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 		message += fmt.Sprintf("❌ Unavailable: %d servers\n\n", unavailableCount)
 	}
 
+	// Create keyboard with quick select buttons for fastest servers
+	var keyboardRows [][]models.InlineKeyboardButton
+
+	// Add quick select buttons for top 3 fastest servers
+	if availableCount > 0 {
+		keyboardRows = append(keyboardRows, []models.InlineKeyboardButton{
+			{Text: "⚡ Quick Select:", CallbackData: "noop"},
+		})
+
+		count := 0
+		maxQuickSelect := min(3, availableCount)
+		var quickSelectRow []models.InlineKeyboardButton
+
+		for _, result := range results {
+			if result.Available && count < maxQuickSelect {
+				serverName := result.Server.Name
+				if len(serverName) > 12 {
+					serverName = serverName[:9] + "..."
+				}
+
+				status := ""
+				if result.Server.ID == currentServerID {
+					status = "✅"
+				} else {
+					status = fmt.Sprintf("%dms", result.Latency)
+				}
+
+				quickSelectRow = append(quickSelectRow, models.InlineKeyboardButton{
+					Text:         fmt.Sprintf("%s (%s)", serverName, status),
+					CallbackData: fmt.Sprintf("server_%s", result.Server.ID),
+				})
+				count++
+			}
+		}
+
+		if len(quickSelectRow) > 0 {
+			keyboardRows = append(keyboardRows, quickSelectRow)
+		}
+
+		// Add separator
+		keyboardRows = append(keyboardRows, []models.InlineKeyboardButton{})
+	}
+
+	// Add standard navigation buttons
+	keyboardRows = append(keyboardRows, []models.InlineKeyboardButton{
+		{Text: "📋 View All Servers", CallbackData: "refresh"},
+		{Text: "🔄 Test Again", CallbackData: "ping_test"},
+	})
+	keyboardRows = append(keyboardRows, []models.InlineKeyboardButton{
+		{Text: "🏠 Main Menu", CallbackData: "main_menu"},
+	})
+
 	keyboard := &models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{
-				{Text: "📋 View All Servers", CallbackData: "refresh"},
-				{Text: "🔄 Test Again", CallbackData: "ping_test"},
-			},
-			{
-				{Text: "🏠 Main Menu", CallbackData: "main_menu"},
-			},
-		},
+		InlineKeyboard: keyboardRows,
 	}
 
 	_, _ = b.EditMessageText(ctx, &bot.EditMessageTextParams{
