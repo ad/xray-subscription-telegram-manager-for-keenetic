@@ -1,21 +1,31 @@
 package server
+
 import (
 	"fmt"
 	"sync"
 	"xray-telegram-manager/config"
+	"xray-telegram-manager/logger"
 	"xray-telegram-manager/types"
 	"xray-telegram-manager/xray"
 )
+
 type ServerManager struct {
 	config             *config.Config
 	servers            []types.Server
 	currentServer      *types.Server
-	subscriptionLoader *SubscriptionLoaderImpl
+	subscriptionLoader SubscriptionLoader
 	pingTester         *PingTesterImpl
 	xrayController     *xray.XrayController
+	nameOptimizer      *ServerNameOptimizer
+	serverSorter       *ServerSorter
+	logger             *logger.Logger
 	mutex              sync.RWMutex
 }
+
 func NewServerManager(cfg *config.Config) *ServerManager {
+	logLevel := logger.ParseLogLevel(cfg.LogLevel)
+	log := logger.NewLogger(logLevel, nil)
+
 	return &ServerManager{
 		config:             cfg,
 		servers:            make([]types.Server, 0),
@@ -23,10 +33,16 @@ func NewServerManager(cfg *config.Config) *ServerManager {
 		subscriptionLoader: NewSubscriptionLoader(cfg),
 		pingTester:         NewPingTester(cfg),
 		xrayController:     xray.NewXrayController(&configAdapter{cfg}),
+		nameOptimizer:      NewServerNameOptimizer(cfg.UI.NameOptimizationThreshold, log),
+		serverSorter:       NewServerSorter(),
+		logger:             log,
 		mutex:              sync.RWMutex{},
 	}
 }
 func NewServerManagerWithCacheDir(cfg *config.Config, cacheDir string) *ServerManager {
+	logLevel := logger.ParseLogLevel(cfg.LogLevel)
+	log := logger.NewLogger(logLevel, nil)
+
 	return &ServerManager{
 		config:             cfg,
 		servers:            make([]types.Server, 0),
@@ -34,12 +50,17 @@ func NewServerManagerWithCacheDir(cfg *config.Config, cacheDir string) *ServerMa
 		subscriptionLoader: NewSubscriptionLoaderWithCacheDir(cfg, cacheDir),
 		pingTester:         NewPingTester(cfg),
 		xrayController:     xray.NewXrayController(&configAdapter{cfg}),
+		nameOptimizer:      NewServerNameOptimizer(cfg.UI.NameOptimizationThreshold, log),
+		serverSorter:       NewServerSorter(),
+		logger:             log,
 		mutex:              sync.RWMutex{},
 	}
 }
+
 type configAdapter struct {
 	*config.Config
 }
+
 func (ca *configAdapter) GetConfigPath() string {
 	return ca.ConfigPath
 }
@@ -56,6 +77,20 @@ func (sm *ServerManager) LoadServers() error {
 	if len(servers) == 0 {
 		return fmt.Errorf("no servers found in subscription")
 	}
+
+	// Apply name optimization if enabled
+	if sm.config.UI.EnableNameOptimization && sm.nameOptimizer != nil {
+		optimizationResult := sm.nameOptimizer.OptimizeNames(servers)
+		if optimizationResult.AppliedCount > 0 {
+			// Apply the optimization to the servers
+			servers = sm.nameOptimizer.ApplyOptimization(servers, optimizationResult.RemovedSuffix)
+			sm.logger.Info("Applied server name optimization: removed '%s' from %d/%d servers",
+				optimizationResult.RemovedSuffix, optimizationResult.AppliedCount, optimizationResult.TotalCount)
+		} else {
+			sm.logger.Debug("No server name optimization applied")
+		}
+	}
+
 	sm.servers = servers
 	return nil
 }
@@ -64,7 +99,9 @@ func (sm *ServerManager) GetServers() []types.Server {
 	defer sm.mutex.RUnlock()
 	result := make([]types.Server, len(sm.servers))
 	copy(result, sm.servers)
-	return result
+
+	// Sort servers alphabetically for consistent display
+	return sm.serverSorter.SortAlphabetically(result)
 }
 func (sm *ServerManager) GetCurrentServer() *types.Server {
 	sm.mutex.RLock()
@@ -128,6 +165,11 @@ func (sm *ServerManager) SwitchServer(serverID string) error {
 func (sm *ServerManager) TestPing() ([]types.PingResult, error) {
 	return sm.TestPingWithProgress(nil)
 }
+
+// GetQuickSelectServers returns the fastest available servers for quick selection
+func (sm *ServerManager) GetQuickSelectServers(results []types.PingResult, limit int) []types.PingResult {
+	return sm.serverSorter.SortForQuickSelect(results, limit)
+}
 func (sm *ServerManager) TestPingWithProgress(progressCallback func(completed, total int, serverName string)) ([]types.PingResult, error) {
 	servers := sm.GetServers()
 	if len(servers) == 0 {
@@ -137,7 +179,8 @@ func (sm *ServerManager) TestPingWithProgress(progressCallback func(completed, t
 	if err != nil {
 		return nil, fmt.Errorf("failed to test server pings: %w", err)
 	}
-	sortedResults := sm.pingTester.SortByLatency(results)
+	// Use the new ServerSorter for combined sorting (speed priority, then alphabetical)
+	sortedResults := sm.serverSorter.SortPingResults(results)
 	return sortedResults, nil
 }
 func (sm *ServerManager) GetServerStatus() (map[string]interface{}, error) {

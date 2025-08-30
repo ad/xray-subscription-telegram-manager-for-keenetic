@@ -10,15 +10,32 @@ import (
 )
 
 type Config struct {
-	AdminID             int64  `json:"admin_id"`
-	BotToken            string `json:"bot_token"`
-	ConfigPath          string `json:"config_path"`
-	SubscriptionURL     string `json:"subscription_url"`
-	LogLevel            string `json:"log_level"`
-	XrayRestartCommand  string `json:"xray_restart_command"`
-	CacheDuration       int    `json:"cache_duration"`
-	HealthCheckInterval int    `json:"health_check_interval"`
-	PingTimeout         int    `json:"ping_timeout"`
+	AdminID             int64        `json:"admin_id"`
+	BotToken            string       `json:"bot_token"`
+	ConfigPath          string       `json:"config_path"`
+	SubscriptionURL     string       `json:"subscription_url"`
+	LogLevel            string       `json:"log_level"`
+	XrayRestartCommand  string       `json:"xray_restart_command"`
+	CacheDuration       int          `json:"cache_duration"`
+	HealthCheckInterval int          `json:"health_check_interval"`
+	PingTimeout         int          `json:"ping_timeout"`
+	UI                  UIConfig     `json:"ui"`
+	Update              UpdateConfig `json:"update"`
+}
+
+type UIConfig struct {
+	MaxButtonTextLength       int     `json:"max_button_text_length"`
+	ServersPerPage            int     `json:"servers_per_page"`
+	MaxQuickSelectServers     int     `json:"max_quick_select_servers"`
+	MessageTimeoutMinutes     int     `json:"message_timeout_minutes"`
+	EnableNameOptimization    bool    `json:"enable_name_optimization"`
+	NameOptimizationThreshold float64 `json:"name_optimization_threshold"`
+}
+
+type UpdateConfig struct {
+	ScriptURL      string `json:"script_url"`
+	TimeoutMinutes int    `json:"timeout_minutes"`
+	BackupConfig   bool   `json:"backup_config"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -63,6 +80,33 @@ func (c *Config) SetDefaults() {
 	if c.PingTimeout == 0 {
 		c.PingTimeout = 5
 	}
+
+	// UI defaults
+	if c.UI.MaxButtonTextLength == 0 {
+		c.UI.MaxButtonTextLength = 50
+	}
+	if c.UI.ServersPerPage == 0 {
+		c.UI.ServersPerPage = 32
+	}
+	if c.UI.MaxQuickSelectServers == 0 {
+		c.UI.MaxQuickSelectServers = 10
+	}
+	if c.UI.MessageTimeoutMinutes == 0 {
+		c.UI.MessageTimeoutMinutes = 60
+	}
+	if c.UI.NameOptimizationThreshold == 0 {
+		c.UI.NameOptimizationThreshold = 0.7
+		c.UI.EnableNameOptimization = true
+	}
+
+	// Update defaults
+	if c.Update.ScriptURL == "" {
+		c.Update.ScriptURL = "https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh"
+	}
+	if c.Update.TimeoutMinutes == 0 {
+		c.Update.TimeoutMinutes = 10
+	}
+	// BackupConfig defaults to false (zero value)
 }
 
 func (c *Config) Validate() error {
@@ -96,6 +140,14 @@ func (c *Config) Validate() error {
 
 	if err := c.validateCommand(); err != nil {
 		return fmt.Errorf("invalid xray_restart_command: %w", err)
+	}
+
+	if err := c.validateUI(); err != nil {
+		return fmt.Errorf("invalid UI configuration: %w", err)
+	}
+
+	if err := c.validateUpdate(); err != nil {
+		return fmt.Errorf("invalid Update configuration: %w", err)
 	}
 
 	return nil
@@ -259,6 +311,19 @@ func CreateTemplate(path string) error {
 		CacheDuration:       3600,
 		HealthCheckInterval: 300,
 		PingTimeout:         5,
+		UI: UIConfig{
+			MaxButtonTextLength:       50,
+			ServersPerPage:            32,
+			MaxQuickSelectServers:     10,
+			MessageTimeoutMinutes:     60,
+			EnableNameOptimization:    true,
+			NameOptimizationThreshold: 0.7,
+		},
+		Update: UpdateConfig{
+			ScriptURL:      "https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh",
+			TimeoutMinutes: 10,
+			BackupConfig:   false,
+		},
 	}
 
 	data, err := json.MarshalIndent(template, "", "    ")
@@ -290,4 +355,101 @@ func (c *Config) GetAdminID() int64 {
 
 func (c *Config) GetBotToken() string {
 	return c.BotToken
+}
+
+func (c *Config) GetUpdateConfig() UpdateConfig {
+	return c.Update
+}
+
+func (c *Config) GetUIConfig() UIConfig {
+	return c.UI
+}
+
+func (c *Config) GetMaxButtonTextLength() int {
+	return c.UI.MaxButtonTextLength
+}
+
+func (c *Config) GetServersPerPage() int {
+	return c.UI.ServersPerPage
+}
+
+func (c *Config) GetMaxQuickSelectServers() int {
+	return c.UI.MaxQuickSelectServers
+}
+
+func (c *Config) GetMessageTimeoutMinutes() int {
+	return c.UI.MessageTimeoutMinutes
+}
+
+func (c *Config) IsNameOptimizationEnabled() bool {
+	return c.UI.EnableNameOptimization
+}
+
+func (c *Config) GetNameOptimizationThreshold() float64 {
+	return c.UI.NameOptimizationThreshold
+}
+
+func (c *Config) validateUI() error {
+	if c.UI.MaxButtonTextLength <= 0 {
+		return fmt.Errorf("max_button_text_length must be positive")
+	}
+	if c.UI.MaxButtonTextLength > 200 {
+		return fmt.Errorf("max_button_text_length cannot exceed 200 characters")
+	}
+
+	if c.UI.ServersPerPage <= 0 {
+		return fmt.Errorf("servers_per_page must be positive")
+	}
+	if c.UI.ServersPerPage > 100 {
+		return fmt.Errorf("servers_per_page cannot exceed 100")
+	}
+
+	if c.UI.MaxQuickSelectServers <= 0 {
+		return fmt.Errorf("max_quick_select_servers must be positive")
+	}
+	if c.UI.MaxQuickSelectServers > 50 {
+		return fmt.Errorf("max_quick_select_servers cannot exceed 50")
+	}
+
+	if c.UI.MessageTimeoutMinutes <= 0 {
+		return fmt.Errorf("message_timeout_minutes must be positive")
+	}
+	if c.UI.MessageTimeoutMinutes > 1440 { // 24 hours
+		return fmt.Errorf("message_timeout_minutes cannot exceed 1440 minutes (24 hours)")
+	}
+
+	if c.UI.NameOptimizationThreshold < 0 || c.UI.NameOptimizationThreshold > 1 {
+		return fmt.Errorf("name_optimization_threshold must be between 0 and 1")
+	}
+
+	return nil
+}
+
+func (c *Config) validateUpdate() error {
+	if c.Update.ScriptURL == "" {
+		return fmt.Errorf("update script_url is required")
+	}
+
+	parsedURL, err := url.Parse(c.Update.ScriptURL)
+	if err != nil {
+		return fmt.Errorf("update script_url is not a valid URL: %w", err)
+	}
+
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return fmt.Errorf("update script_url must use http or https scheme")
+	}
+
+	if parsedURL.Host == "" {
+		return fmt.Errorf("update script_url must have a valid host")
+	}
+
+	if c.Update.TimeoutMinutes <= 0 {
+		return fmt.Errorf("update timeout_minutes must be positive")
+	}
+
+	if c.Update.TimeoutMinutes > 60 {
+		return fmt.Errorf("update timeout_minutes cannot exceed 60 minutes")
+	}
+
+	return nil
 }

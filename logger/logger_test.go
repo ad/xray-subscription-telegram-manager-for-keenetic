@@ -112,7 +112,11 @@ func TestLogger_Formatting(t *testing.T) {
 func TestNewFileLogger(t *testing.T) {
 	// Create a temporary file
 	tmpFile := "/tmp/test_logger.log"
-	defer os.Remove(tmpFile)
+	defer func() {
+		if err := os.Remove(tmpFile); err != nil {
+			t.Logf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	logger, err := NewFileLogger(INFO, tmpFile)
 	if err != nil {

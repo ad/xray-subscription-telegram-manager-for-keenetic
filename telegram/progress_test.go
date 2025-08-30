@@ -6,8 +6,8 @@ import (
 )
 
 func TestCreateProgressBar(t *testing.T) {
-	// Create a TelegramBot instance without initializing the actual bot
-	tb := &TelegramBot{}
+	// Create a MessageFormatter instance for testing
+	mf := NewMessageFormatter()
 
 	tests := []struct {
 		name       string
@@ -15,16 +15,16 @@ func TestCreateProgressBar(t *testing.T) {
 		length     int
 		expected   string
 	}{
-		{"0 percent", 0, 10, "[░░░░░░░░░░]"},
-		{"50 percent", 50, 10, "[█████░░░░░]"},
-		{"100 percent", 100, 10, "[██████████]"},
-		{"Over 100", 150, 10, "[██████████]"},
-		{"Negative", -10, 10, "[░░░░░░░░░░]"},
+		{"0 percent", 0, 10, "[░░░░░░░░░░] 0%"},
+		{"50 percent", 50, 10, "[█████░░░░░] 50%"},
+		{"100 percent", 100, 10, "[██████████] 100%"},
+		{"Over 100", 150, 10, "[██████████] 100%"},
+		{"Negative", -10, 10, "[░░░░░░░░░░] 0%"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tb.createProgressBar(tt.percentage, tt.length)
+			result := mf.createProgressBar(tt.percentage, tt.length)
 			if result != tt.expected {
 				t.Errorf("createProgressBar(%d, %d) = %s, want %s", tt.percentage, tt.length, result, tt.expected)
 			}

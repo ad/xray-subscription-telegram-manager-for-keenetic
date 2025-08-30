@@ -1,4 +1,5 @@
 package service
+
 import (
 	"context"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"xray-telegram-manager/telegram"
 	"xray-telegram-manager/types"
 )
+
 type Service struct {
 	config          *config.Config
 	logger          interfaces.Logger
@@ -23,6 +25,7 @@ type Service struct {
 	lastHealthCheck time.Time
 	healthStatus    map[string]interface{}
 }
+
 func NewService(cfg *config.Config, log interfaces.Logger) (*Service, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config cannot be nil")

@@ -3,8 +3,8 @@ package telegram
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
+	"xray-telegram-manager/config"
 	"xray-telegram-manager/types"
 
 	"github.com/go-telegram/bot"
@@ -12,12 +12,14 @@ import (
 )
 
 type TelegramBot struct {
-	bot         *bot.Bot
-	config      ConfigProvider
-	serverMgr   ServerManager
-	logger      Logger
-	rateLimiter *RateLimiter
-	handlers    *CommandHandlers
+	bot                 *bot.Bot
+	config              ConfigProvider
+	serverMgr           ServerManager
+	logger              Logger
+	rateLimiter         *RateLimiter
+	handlers            *CommandHandlers
+	messageManager      *MessageManager
+	buttonTextProcessor *ButtonTextProcessor
 }
 
 type Logger interface {
@@ -30,6 +32,7 @@ type Logger interface {
 type ConfigProvider interface {
 	GetAdminID() int64
 	GetBotToken() string
+	GetUpdateConfig() config.UpdateConfig
 }
 
 type ServerManager interface {
@@ -39,6 +42,7 @@ type ServerManager interface {
 	GetCurrentServer() *types.Server
 	TestPing() ([]types.PingResult, error)
 	TestPingWithProgress(progressCallback func(completed, total int, serverName string)) ([]types.PingResult, error)
+	GetQuickSelectServers(results []types.PingResult, limit int) []types.PingResult
 }
 
 func NewTelegramBot(config ConfigProvider, serverMgr ServerManager, logger Logger) (*TelegramBot, error) {
@@ -81,7 +85,14 @@ func NewTelegramBot(config ConfigProvider, serverMgr ServerManager, logger Logge
 		rateLimiter: rateLimiter,
 	}
 
-	tb.handlers = NewCommandHandlers(tb)
+	tb.messageManager = NewMessageManager(b, logger)
+	tb.buttonTextProcessor = NewButtonTextProcessor(50) // Default max length of 50
+
+	// Create UpdateManager with configuration
+	updateCfg := config.GetUpdateConfig()
+	timeout := time.Duration(updateCfg.TimeoutMinutes) * time.Minute
+	updateManager := NewUpdateManager(updateCfg.ScriptURL, timeout, updateCfg.BackupConfig, logger)
+	tb.handlers = NewCommandHandlers(tb, updateManager)
 
 	return tb, nil
 }
@@ -91,6 +102,9 @@ func (tb *TelegramBot) Start(ctx context.Context) error {
 
 	// Start rate limiter cleanup routine
 	go tb.rateLimiter.StartCleanupRoutine(ctx)
+
+	// Start message manager cleanup routine
+	go tb.messageManager.StartCleanupRoutine(ctx)
 
 	tb.logger.Info("Starting Telegram bot...")
 
@@ -103,6 +117,11 @@ func (tb *TelegramBot) Start(ctx context.Context) error {
 func (tb *TelegramBot) Stop() {
 }
 
+// GetMessageManager returns the message manager instance
+func (tb *TelegramBot) GetMessageManager() *MessageManager {
+	return tb.messageManager
+}
+
 func (tb *TelegramBot) registerHandlers() {
 	tb.logger.Debug("Registering Telegram bot handlers...")
 
@@ -110,9 +129,10 @@ func (tb *TelegramBot) registerHandlers() {
 	tb.bot.RegisterHandler(bot.HandlerTypeMessageText, "/list", bot.MatchTypeExact, tb.handleList)
 	tb.bot.RegisterHandler(bot.HandlerTypeMessageText, "/status", bot.MatchTypeExact, tb.handlers.handleStatus)
 	tb.bot.RegisterHandler(bot.HandlerTypeMessageText, "/ping", bot.MatchTypeExact, tb.handlePing)
+	tb.bot.RegisterHandler(bot.HandlerTypeMessageText, "/update", bot.MatchTypeExact, tb.handlers.handleUpdate)
 	tb.bot.RegisterHandler(bot.HandlerTypeCallbackQueryData, "", bot.MatchTypePrefix, tb.handleCallback)
 
-	tb.logger.Info("Registered handlers for commands: /start, /list, /status, /ping and callback queries")
+	tb.logger.Info("Registered handlers for commands: /start, /list, /status, /ping, /update and callback queries")
 }
 
 func (tb *TelegramBot) isAuthorized(userID int64) bool {
@@ -121,12 +141,13 @@ func (tb *TelegramBot) isAuthorized(userID int64) bool {
 
 func (tb *TelegramBot) sendUnauthorizedMessage(ctx context.Context, b *bot.Bot, chatID int64) {
 	tb.logger.Debug("Sending unauthorized access message to user %d", chatID)
-	message := "❌ *Unauthorized Access*\n\n" +
-		"This bot is restricted to the configured admin user\\."
+
+	messageFormatter := NewMessageFormatter()
+	message := messageFormatter.FormatUnauthorizedMessage()
+
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:    chatID,
-		Text:      message,
-		ParseMode: models.ParseModeMarkdown,
+		ChatID: chatID,
+		Text:   message,
 	})
 
 	if err != nil {
@@ -154,11 +175,12 @@ func (tb *TelegramBot) handleList(ctx context.Context, b *bot.Bot, update *model
 
 	if len(servers) == 0 {
 		tb.logger.Warn("No servers available for /list command")
-		message := "❌ No servers available. Use /start to refresh the server list."
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: update.Message.Chat.ID,
-			Text:   message,
-		})
+		messageFormatter := NewMessageFormatter()
+		noServersContent := MessageContent{
+			Text: messageFormatter.FormatNoServersMessage(),
+			Type: MessageTypeServerList,
+		}
+		_ = tb.messageManager.SendNew(ctx, update.Message.Chat.ID, noServersContent)
 		return
 	}
 
@@ -168,23 +190,17 @@ func (tb *TelegramBot) handleList(ctx context.Context, b *bot.Bot, update *model
 		currentServerID = currentServer.ID
 	}
 
-	message := "📋 Available Servers:\n\n"
-	for i, server := range servers {
-		status := ""
-		if server.ID == currentServerID {
-			status = " ✅ Current"
-		}
-		message += fmt.Sprintf("%d. %s%s\n", i+1, server.Name, status)
-	}
+	messageFormatter := NewMessageFormatter()
+	message := messageFormatter.FormatServerListMessage(servers, currentServerID, 0, 1)
 
 	keyboard := tb.createServerListKeyboard(servers, 0)
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:      update.Message.Chat.ID,
+	serverListContent := MessageContent{
 		Text:        message,
 		ReplyMarkup: keyboard,
-	})
+		Type:        MessageTypeServerList,
+	}
 
-	if err != nil {
+	if err := tb.messageManager.SendNew(ctx, update.Message.Chat.ID, serverListContent); err != nil {
 		tb.logger.Error("Failed to send server list message: %v", err)
 	} else {
 		tb.logger.Info("Successfully sent server list to user %d", userID)
@@ -238,6 +254,18 @@ func (tb *TelegramBot) handleCallback(ctx context.Context, b *bot.Bot, update *m
 	case data == "main_menu":
 		tb.logger.Debug("Processing main_menu callback for user %d", userID)
 		tb.handleMainMenuCallback(ctx, b, chatID, update.CallbackQuery.ID)
+	case data == "confirm_update":
+		tb.logger.Debug("Processing confirm_update callback for user %d", userID)
+		tb.handlers.handleUpdateConfirm(ctx, b, chatID, update.CallbackQuery.ID)
+	case data == "update_status":
+		tb.logger.Debug("Processing update_status callback for user %d", userID)
+		tb.handlers.handleUpdateStatus(ctx, b, chatID, update.CallbackQuery.ID)
+	case data == "update_menu":
+		tb.logger.Debug("Processing update_menu callback for user %d", userID)
+		tb.handleUpdateMenuCallback(ctx, b, chatID, update.CallbackQuery.ID)
+	case data == "status":
+		tb.logger.Debug("Processing status callback for user %d", userID)
+		tb.handleStatusCallback(ctx, b, chatID, update.CallbackQuery.ID)
 	case len(data) > 5 && data[:5] == "page_":
 		tb.logger.Debug("Processing pagination callback for user %d: %s", userID, data)
 		tb.handlePaginationCallback(ctx, b, chatID, update.CallbackQuery.ID, data)
@@ -263,17 +291,6 @@ func (tb *TelegramBot) handleCallback(ctx context.Context, b *bot.Bot, update *m
 	}
 }
 
-func (tb *TelegramBot) createMainMenuKeyboard() *models.InlineKeyboardMarkup {
-	return &models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{
-				{Text: "📋 Server List", CallbackData: "refresh"},
-				{Text: "📊 Ping Test", CallbackData: "ping_test"},
-			},
-		},
-	}
-}
-
 func (tb *TelegramBot) createServerListKeyboard(servers []types.Server, page int) *models.InlineKeyboardMarkup {
 	const serversPerPage = 32
 	start := page * serversPerPage
@@ -291,16 +308,17 @@ func (tb *TelegramBot) createServerListKeyboard(servers []types.Server, page int
 
 	for i := start; i < end; i++ {
 		server := servers[i]
-		buttonText := server.Name
-		if len(buttonText) > 50 {
-			buttonText = buttonText[:47] + "..."
+
+		// Determine status emoji
+		var statusEmoji string
+		if server.ID == currentServerID {
+			statusEmoji = "✅"
+		} else {
+			statusEmoji = "🌐"
 		}
 
-		if server.ID == currentServerID {
-			buttonText = "✅ " + buttonText
-		} else {
-			buttonText = "🌐 " + buttonText
-		}
+		// Use ButtonTextProcessor to create properly formatted button text
+		buttonText := tb.buttonTextProcessor.ProcessServerButtonText(server.Name, statusEmoji, 50)
 
 		row := []models.InlineKeyboardButton{
 			{
@@ -351,19 +369,31 @@ func (tb *TelegramBot) handleRefreshCallback(ctx context.Context, b *bot.Bot, ch
 		Text:            "🔄 Refreshing server list...",
 	})
 
-	_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   "🔄 Refreshing server list...\n⏳ Please wait...",
-	})
+	// Show loading message using MessageManager
+	loadingContent := MessageContent{
+		Text: "🔄 Refreshing server list...\n⏳ Please wait...",
+		Type: MessageTypeServerList,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, loadingContent); err != nil {
+		tb.logger.Error("Failed to send loading message: %v", err)
+		return
+	}
 
 	tb.logger.Debug("Loading servers for refresh callback...")
 	if err := tb.serverMgr.LoadServers(); err != nil {
 		tb.logger.Error("Failed to load servers for refresh callback: %v", err)
-		message := fmt.Sprintf("❌ Failed to refresh servers: %v", err)
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID,
-			Text:   message,
-		})
+		messageFormatter := NewMessageFormatter()
+		suggestions := []string{
+			"Check your internet connection",
+			"Verify subscription configuration",
+			"Try again in a few moments",
+		}
+		errorContent := MessageContent{
+			Text: messageFormatter.FormatErrorMessage("Failed to Refresh Servers", err.Error(), suggestions),
+			Type: MessageTypeServerList,
+		}
+		_ = tb.messageManager.SendOrEdit(ctx, chatID, errorContent)
 		return
 	}
 
@@ -372,11 +402,12 @@ func (tb *TelegramBot) handleRefreshCallback(ctx context.Context, b *bot.Bot, ch
 
 	if len(servers) == 0 {
 		tb.logger.Warn("No servers available for refresh callback")
-		message := "❌ No servers available. Please check your subscription configuration."
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID,
-			Text:   message,
-		})
+		messageFormatter := NewMessageFormatter()
+		noServersContent := MessageContent{
+			Text: messageFormatter.FormatNoServersMessage(),
+			Type: MessageTypeServerList,
+		}
+		_ = tb.messageManager.SendOrEdit(ctx, chatID, noServersContent)
 		return
 	}
 
@@ -386,24 +417,17 @@ func (tb *TelegramBot) handleRefreshCallback(ctx context.Context, b *bot.Bot, ch
 		currentServerID = currentServer.ID
 	}
 
-	message := "📋 Available Servers:\n\n"
-	for i, server := range servers {
-		status := ""
-		if server.ID == currentServerID {
-			status = " ✅ Current"
-		}
-		message += fmt.Sprintf("%d. %s%s\n", i+1, server.Name, status)
-	}
+	messageFormatter := NewMessageFormatter()
+	message := messageFormatter.FormatServerListMessage(servers, currentServerID, 0, 1)
 
 	keyboard := tb.createServerListKeyboard(servers, 0)
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   message,
-
+	serverListContent := MessageContent{
+		Text:        message,
 		ReplyMarkup: keyboard,
-	})
+		Type:        MessageTypeServerList,
+	}
 
-	if err != nil {
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, serverListContent); err != nil {
 		tb.logger.Error("Failed to send refreshed server list: %v", err)
 	} else {
 		tb.logger.Info("Successfully sent refreshed server list to user %d", chatID)
@@ -423,67 +447,64 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 
 	if len(servers) == 0 {
 		tb.logger.Warn("No servers available for ping testing")
-		message := "❌ No servers available for ping testing."
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID,
-			Text:   message,
-		})
+		messageFormatter := NewMessageFormatter()
+		noServersContent := MessageContent{
+			Text: messageFormatter.FormatNoServersMessage(),
+			Type: MessageTypePingTest,
+		}
+		_ = tb.messageManager.SendOrEdit(ctx, chatID, noServersContent)
 		return
 	}
 
-	message := fmt.Sprintf("🏓 Ping Test Started\n\n📊 Testing %d servers...\n⏳ Progress: 0/%d\n\n🔄 Initializing...", len(servers), len(servers))
-	progressMsg, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   message,
-	})
-	if err != nil {
+	// Send initial progress message using MessageManager
+	messageFormatter := NewMessageFormatter()
+	initialMessage := messageFormatter.FormatPingTestProgress(0, len(servers), "Initializing...")
+	initialContent := MessageContent{
+		Text: initialMessage,
+		Type: MessageTypePingTest,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, initialContent); err != nil {
+		tb.logger.Error("Failed to send initial ping test message: %v", err)
 		return
 	}
 
 	progressCallback := func(completed, total int, serverName string) {
-		displayName := serverName
-		if len(displayName) > 30 {
-			displayName = displayName[:27] + "..."
+		updatedMessage := messageFormatter.FormatPingTestProgress(completed, total, serverName)
+
+		progressContent := MessageContent{
+			Text: updatedMessage,
+			Type: MessageTypePingTest,
 		}
 
-		percentage := (completed * 100) / total
-		progressBar := tb.createProgressBar(percentage, 20)
-
-		updatedMessage := fmt.Sprintf("🏓 Ping Test in Progress\n\n📊 Testing %d servers...\n⏳ Progress: %d/%d (%d%%)\n\n%s\n\n🔄 Last tested: %s",
-			total, completed, total, percentage, progressBar, displayName)
-
-		_, _ = b.EditMessageText(ctx, &bot.EditMessageTextParams{
-			ChatID:    progressMsg.Chat.ID,
-			MessageID: progressMsg.ID,
-			Text:      updatedMessage,
-		})
+		// Use MessageManager for progress updates
+		_ = tb.messageManager.SendOrEdit(ctx, chatID, progressContent)
 	}
 
 	tb.logger.Debug("Starting ping test with progress updates for %d servers", len(servers))
 	results, err := tb.serverMgr.TestPingWithProgress(progressCallback)
 	if err != nil {
 		tb.logger.Error("Ping test failed: %v", err)
-		updatedMessage := fmt.Sprintf("🏓 Ping Test Failed\n\n❌ Error: %v\n\nPlease try again or check your network connection.", err)
+		// Force cleanup the user's active message since the operation failed
+		tb.messageManager.ForceCleanupUser(chatID, "ping test failed")
 
-		retryKeyboard := &models.InlineKeyboardMarkup{
-			InlineKeyboard: [][]models.InlineKeyboardButton{
-				{
-					{Text: "🔄 Retry Ping Test", CallbackData: "ping_test"},
-					{Text: "📋 Server List", CallbackData: "refresh"},
-				},
-				{
-					{Text: "🏠 Main Menu", CallbackData: "main_menu"},
-				},
-			},
+		suggestions := []string{
+			"Check your internet connection",
+			"Try again in a few moments",
+			"Verify server configuration",
+		}
+		errorMessage := messageFormatter.FormatErrorMessage("Ping Test Failed", err.Error(), suggestions)
+
+		navigationHelper := NewNavigationHelper()
+		retryKeyboard := navigationHelper.CreateErrorNavigationKeyboard("ping_test", "ping_test")
+
+		errorContent := MessageContent{
+			Text:        errorMessage,
+			ReplyMarkup: retryKeyboard,
+			Type:        MessageTypePingTest,
 		}
 
-		_, _ = b.EditMessageText(ctx, &bot.EditMessageTextParams{
-			ChatID:    progressMsg.Chat.ID,
-			MessageID: progressMsg.ID,
-			Text:      updatedMessage,
-
-			ReplyMarkup: retryKeyboard,
-		})
+		_ = tb.messageManager.SendOrEdit(ctx, chatID, errorContent)
 		return
 	}
 
@@ -502,92 +523,61 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 
 	tb.logger.Info("Ping test completed: %d/%d servers available", availableCount, len(results))
 
-	message = fmt.Sprintf("🏓 Ping Test Complete\n\n📊 Summary: %d/%d servers available\n\n", availableCount, len(results))
-
-	fastestCount := min(10, len(results))
-	if availableCount > 0 {
-		message += "⚡ Fastest Servers:\n"
-		count := 0
-		for _, result := range results {
-			if result.Available && count < fastestCount {
-				status := ""
-				if result.Server.ID == currentServerID {
-					status = " ✅ Current"
-				}
-				message += fmt.Sprintf("%d. %s%s ⚡ %dms\n",
-					count+1, result.Server.Name, status, result.Latency)
-				count++
-			}
-		}
-		message += "\n"
-	}
-
-	unavailableCount := len(results) - availableCount
-	if unavailableCount > 0 {
-		message += fmt.Sprintf("❌ Unavailable: %d servers\n\n", unavailableCount)
-	}
+	message := messageFormatter.FormatPingTestResults(results, currentServerID)
 
 	// Create keyboard with quick select buttons for fastest servers
+	navigationHelper := NewNavigationHelper()
 	var keyboardRows [][]models.InlineKeyboardButton
 
-	// Add quick select buttons for top 3 fastest servers
+	// Add quick select buttons for fastest servers using the new sorting
 	if availableCount > 0 {
-		keyboardRows = append(keyboardRows, []models.InlineKeyboardButton{
-			{Text: "⚡ Quick Select:", CallbackData: "noop"},
-		})
+		// Use the server manager's quick select functionality
+		quickSelectResults := tb.serverMgr.GetQuickSelectServers(results, 10)
 
-		count := 0
-		maxQuickSelect := min(10, availableCount)
+		var quickSelectServers []QuickSelectServer
+		for _, result := range quickSelectResults {
+			// Process server name with emoji awareness
+			processedServerName := tb.buttonTextProcessor.ProcessButtonText(result.Server.Name, 15)
 
-		for _, result := range results {
-			if result.Available && count < maxQuickSelect {
-				serverName := result.Server.Name
-				if len(serverName) > 20 {
-					serverName = serverName[:17] + "..."
-				}
-
-				status := ""
-				if result.Server.ID == currentServerID {
-					status = "✅"
-				} else {
-					status = fmt.Sprintf("%dms", result.Latency)
-				}
-
-				// Each server button on its own row
-				keyboardRows = append(keyboardRows, []models.InlineKeyboardButton{
-					{
-						Text:         fmt.Sprintf("%s (%s)", serverName, status),
-						CallbackData: fmt.Sprintf("server_%s", result.Server.ID),
-					},
-				})
-				count++
+			status := ""
+			if result.Server.ID == currentServerID {
+				status = "✅"
+			} else {
+				status = fmt.Sprintf("%dms", result.Latency)
 			}
+
+			// Create button text with proper formatting
+			buttonText := fmt.Sprintf("%s (%s)", processedServerName, status)
+
+			// Ensure the entire button text fits within reasonable limits
+			finalButtonText := tb.buttonTextProcessor.ProcessButtonText(buttonText, 30)
+
+			quickSelectServers = append(quickSelectServers, QuickSelectServer{
+				ID:         result.Server.ID,
+				ButtonText: finalButtonText,
+			})
 		}
 
-		// Add separator
-		keyboardRows = append(keyboardRows, []models.InlineKeyboardButton{})
+		quickSelectRows := navigationHelper.CreateQuickSelectKeyboard(quickSelectServers)
+		keyboardRows = append(keyboardRows, quickSelectRows...)
 	}
 
 	// Add standard navigation buttons
-	keyboardRows = append(keyboardRows, []models.InlineKeyboardButton{
-		{Text: "📋 View All Servers", CallbackData: "refresh"},
-		{Text: "🔄 Test Again", CallbackData: "ping_test"},
-	})
-	keyboardRows = append(keyboardRows, []models.InlineKeyboardButton{
-		{Text: "🏠 Main Menu", CallbackData: "main_menu"},
-	})
+	pingNavKeyboard := navigationHelper.CreatePingTestNavigationKeyboard(availableCount > 0)
+	keyboardRows = append(keyboardRows, pingNavKeyboard.InlineKeyboard...)
 
 	keyboard := &models.InlineKeyboardMarkup{
 		InlineKeyboard: keyboardRows,
 	}
 
-	_, _ = b.EditMessageText(ctx, &bot.EditMessageTextParams{
-		ChatID:    progressMsg.Chat.ID,
-		MessageID: progressMsg.ID,
-		Text:      message,
-
+	// Use MessageManager for final results
+	resultsContent := MessageContent{
+		Text:        message,
 		ReplyMarkup: keyboard,
-	})
+		Type:        MessageTypePingTest,
+	}
+
+	_ = tb.messageManager.SendOrEdit(ctx, chatID, resultsContent)
 }
 
 func (tb *TelegramBot) handleMainMenuCallback(ctx context.Context, b *bot.Bot, chatID int64, callbackQueryID string) {
@@ -601,17 +591,18 @@ func (tb *TelegramBot) handleMainMenuCallback(ctx context.Context, b *bot.Bot, c
 	servers := tb.serverMgr.GetServers()
 	tb.logger.Debug("Retrieved %d servers for main menu", len(servers))
 
-	message := fmt.Sprintf("🚀 Xray Telegram Manager\n\nWelcome! I can help you manage your xray proxy servers.\n\n📊 Available servers: %d\n\nUse the buttons below to interact with the system:", len(servers))
+	messageFormatter := NewMessageFormatter()
+	message := messageFormatter.FormatWelcomeMessage(len(servers))
 
-	keyboard := tb.createMainMenuKeyboard()
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   message,
-
+	navigationHelper := NewNavigationHelper()
+	keyboard := navigationHelper.CreateMainMenuKeyboard()
+	mainMenuContent := MessageContent{
+		Text:        message,
 		ReplyMarkup: keyboard,
-	})
+		Type:        MessageTypeMenu,
+	}
 
-	if err != nil {
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, mainMenuContent); err != nil {
 		tb.logger.Error("Failed to send main menu: %v", err)
 	} else {
 		tb.logger.Info("Successfully sent main menu to user %d", chatID)
@@ -641,11 +632,12 @@ func (tb *TelegramBot) handlePaginationCallback(ctx context.Context, b *bot.Bot,
 
 	if len(servers) == 0 {
 		tb.logger.Warn("No servers available for pagination")
-		message := "❌ No servers available."
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID,
-			Text:   message,
-		})
+		messageFormatter := NewMessageFormatter()
+		noServersContent := MessageContent{
+			Text: messageFormatter.FormatNoServersMessage(),
+			Type: MessageTypeServerList,
+		}
+		_ = tb.messageManager.SendOrEdit(ctx, chatID, noServersContent)
 		return
 	}
 
@@ -653,10 +645,16 @@ func (tb *TelegramBot) handlePaginationCallback(ctx context.Context, b *bot.Bot,
 	totalPages := (len(servers) + serversPerPage - 1) / serversPerPage
 	if page < 0 || page >= totalPages {
 		tb.logger.Error("Invalid page number %d, total pages: %d", page, totalPages)
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID,
-			Text:   "❌ Invalid page number",
-		})
+		messageFormatter := NewMessageFormatter()
+		suggestions := []string{
+			"Use the navigation buttons",
+			"Return to the first page",
+		}
+		invalidPageContent := MessageContent{
+			Text: messageFormatter.FormatErrorMessage("Invalid Page", "The requested page number is out of range", suggestions),
+			Type: MessageTypeServerList,
+		}
+		_ = tb.messageManager.SendOrEdit(ctx, chatID, invalidPageContent)
 		return
 	}
 
@@ -668,31 +666,17 @@ func (tb *TelegramBot) handlePaginationCallback(ctx context.Context, b *bot.Bot,
 		currentServerID = currentServer.ID
 	}
 
-	start := page * serversPerPage
-	end := start + serversPerPage
-	if end > len(servers) {
-		end = len(servers)
-	}
-
-	message := fmt.Sprintf("📋 Available Servers (Page %d/%d):\n\n", page+1, totalPages)
-	for i := start; i < end; i++ {
-		server := servers[i]
-		status := ""
-		if server.ID == currentServerID {
-			status = " ✅ Current"
-		}
-		message += fmt.Sprintf("%d. %s%s\n", i+1, server.Name, status)
-	}
+	messageFormatter := NewMessageFormatter()
+	message := messageFormatter.FormatServerListMessage(servers, currentServerID, page, totalPages)
 
 	keyboard := tb.createServerListKeyboard(servers, page)
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   message,
-
+	paginationContent := MessageContent{
+		Text:        message,
 		ReplyMarkup: keyboard,
-	})
+		Type:        MessageTypeServerList,
+	}
 
-	if err != nil {
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, paginationContent); err != nil {
 		tb.logger.Error("Failed to send pagination page %d: %v", page+1, err)
 	} else {
 		tb.logger.Info("Successfully sent page %d/%d to user %d", page+1, totalPages, chatID)
@@ -732,29 +716,20 @@ func (tb *TelegramBot) handleServerSelectCallback(ctx context.Context, b *bot.Bo
 			ShowAlert:       true,
 		})
 
-		message := fmt.Sprintf("✅ Current Active Server\n\n🏷️ Name: %s\n🌐 Address: %s:%d\n🔗 Protocol: %s\n🏷️ Tag: %s\n\n🟢 This server is already active and running.\n\n💡 You can test the connection or choose a different server.",
-			selectedServer.Name, selectedServer.Address, selectedServer.Port, selectedServer.Protocol, selectedServer.Tag)
+		messageFormatter := NewMessageFormatter()
+		message := messageFormatter.FormatServerStatusMessage(selectedServer, nil)
+		message += "\n🟢 This server is already active and running.\n\n💡 You can test the connection or choose a different server."
 
-		keyboard := &models.InlineKeyboardMarkup{
-			InlineKeyboard: [][]models.InlineKeyboardButton{
-				{
-					{Text: "📊 Test Connection", CallbackData: "ping_test"},
-					{Text: "📋 Choose Different", CallbackData: "refresh"},
-				},
-				{
-					{Text: "🏠 Main Menu", CallbackData: "main_menu"},
-				},
-			},
+		navigationHelper := NewNavigationHelper()
+		keyboard := navigationHelper.CreateServerStatusNavigationKeyboard(true)
+
+		activeServerContent := MessageContent{
+			Text:        message,
+			ReplyMarkup: keyboard,
+			Type:        MessageTypeStatus,
 		}
 
-		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID,
-			Text:   message,
-
-			ReplyMarkup: keyboard,
-		})
-
-		if err != nil {
+		if err := tb.messageManager.SendOrEdit(ctx, chatID, activeServerContent); err != nil {
 			tb.logger.Error("Failed to send 'server already active' message: %v", err)
 		} else {
 			tb.logger.Info("Successfully sent 'server already active' message to user %d", chatID)
@@ -782,26 +757,25 @@ func (tb *TelegramBot) handleServerSelectCallback(ctx context.Context, b *bot.Bo
 		"Are you sure you want to proceed?",
 		selectedServer.Name, selectedServer.Address, selectedServer.Port, selectedServer.Protocol, selectedServer.Tag, currentServerInfo)
 
-	confirmKeyboard := &models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{
-				{Text: "✅ Yes, Switch Server", CallbackData: fmt.Sprintf("confirm_%s", serverID)},
-			},
-			{
-				{Text: "❌ Cancel", CallbackData: "refresh"},
-				{Text: "📊 Test First", CallbackData: "ping_test"},
-			},
-		},
-	}
+	navigationHelper := NewNavigationHelper()
+	confirmKeyboard := navigationHelper.CreateConfirmationKeyboard(
+		fmt.Sprintf("confirm_%s", serverID),
+		"refresh",
+		"✅ Yes, Switch Server",
+		"❌ Cancel")
 
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   message,
-
-		ReplyMarkup: confirmKeyboard,
+	// Add test first option
+	confirmKeyboard.InlineKeyboard = append(confirmKeyboard.InlineKeyboard, []models.InlineKeyboardButton{
+		{Text: "📊 Test First", CallbackData: "ping_test"},
 	})
 
-	if err != nil {
+	confirmContent := MessageContent{
+		Text:        message,
+		ReplyMarkup: confirmKeyboard,
+		Type:        MessageTypeStatus,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, confirmContent); err != nil {
 		tb.logger.Error("Failed to send server switch confirmation: %v", err)
 	} else {
 		tb.logger.Info("Successfully sent server switch confirmation to user %d", chatID)
@@ -827,189 +801,315 @@ func (tb *TelegramBot) handleConfirmSwitchCallback(ctx context.Context, b *bot.B
 
 	if selectedServer == nil {
 		tb.logger.Error("Server not found for switch confirmation: %s", serverID)
+		// Force cleanup the user's active message since we're in an error state
+		tb.messageManager.ForceCleanupUser(chatID, "server not found")
 		tb.sendErrorMessage(ctx, b, chatID, "Server not found", "The selected server could not be found. Please refresh the server list and try again.", "refresh")
 		return
 	}
 
 	tb.logger.Debug("Starting server switch to: %s (%s:%d)", selectedServer.Name, selectedServer.Address, selectedServer.Port)
 
+	// Step 1: Preparing configuration
 	message := fmt.Sprintf("🔄 Switching to Server\n\n🏷️ Name: %s\n🌐 Address: %s:%d\n🔗 Protocol: %s\n\n⏳ Step 1/4: Preparing configuration...",
 		selectedServer.Name, selectedServer.Address, selectedServer.Port, selectedServer.Protocol)
 
-	progressMsg, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   message,
-	})
-	if err != nil {
+	step1Content := MessageContent{
+		Text: message,
+		Type: MessageTypeStatus,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, step1Content); err != nil {
+		tb.logger.Error("Failed to send step 1 message: %v", err)
 		return
 	}
 
 	time.Sleep(500 * time.Millisecond)
+
+	// Step 2: Creating backup
 	message = fmt.Sprintf("🔄 Switching to Server\n\n🏷️ Name: %s\n🌐 Address: %s:%d\n🔗 Protocol: %s\n\n⏳ Step 2/4: Creating backup...",
 		selectedServer.Name, selectedServer.Address, selectedServer.Port, selectedServer.Protocol)
 
-	_, _ = b.EditMessageText(ctx, &bot.EditMessageTextParams{
-		ChatID:    progressMsg.Chat.ID,
-		MessageID: progressMsg.ID,
-		Text:      message,
-	})
+	step2Content := MessageContent{
+		Text: message,
+		Type: MessageTypeStatus,
+	}
+
+	_ = tb.messageManager.SendOrEdit(ctx, chatID, step2Content)
 
 	time.Sleep(500 * time.Millisecond)
+
+	// Step 3: Updating configuration
 	message = fmt.Sprintf("🔄 Switching to Server\n\n🏷️ Name: %s\n🌐 Address: %s:%d\n🔗 Protocol: %s\n\n⏳ Step 3/4: Updating configuration...",
 		selectedServer.Name, selectedServer.Address, selectedServer.Port, selectedServer.Protocol)
 
-	_, _ = b.EditMessageText(ctx, &bot.EditMessageTextParams{
-		ChatID:    progressMsg.Chat.ID,
-		MessageID: progressMsg.ID,
-		Text:      message,
-	})
+	step3Content := MessageContent{
+		Text: message,
+		Type: MessageTypeStatus,
+	}
+
+	_ = tb.messageManager.SendOrEdit(ctx, chatID, step3Content)
 
 	time.Sleep(500 * time.Millisecond)
+
+	// Step 4: Restarting xray service
 	message = fmt.Sprintf("🔄 Switching to Server\n\n🏷️ Name: %s\n🌐 Address: %s:%d\n🔗 Protocol: %s\n\n⏳ Step 4/4: Restarting xray service...",
 		selectedServer.Name, selectedServer.Address, selectedServer.Port, selectedServer.Protocol)
 
-	_, _ = b.EditMessageText(ctx, &bot.EditMessageTextParams{
-		ChatID:    progressMsg.Chat.ID,
-		MessageID: progressMsg.ID,
-		Text:      message,
-	})
+	step4Content := MessageContent{
+		Text: message,
+		Type: MessageTypeStatus,
+	}
+
+	_ = tb.messageManager.SendOrEdit(ctx, chatID, step4Content)
 
 	tb.logger.Debug("Executing server switch to %s", selectedServer.Name)
 	if err := tb.serverMgr.SwitchServer(serverID); err != nil {
 		tb.logger.Error("Server switch failed for %s: %v", selectedServer.Name, err)
+		// Force cleanup the user's active message since the operation failed
+		tb.messageManager.ForceCleanupUser(chatID, "server switch failed")
 		tb.sendSwitchErrorMessage(ctx, b, chatID, selectedServer, err)
 		return
 	}
 
 	tb.logger.Info("Server switch successful to %s", selectedServer.Name)
 
-	message = fmt.Sprintf("✅ Server Switch Successful\n\n🏷️ Name: %s\n🌐 Address: %s:%d\n🔗 Protocol: %s\n🏷️ Tag: %s\n\n🟢 Status: Active and ready\n⚡ Service: Xray restarted successfully\n\n🎉 You are now connected to the new server!",
-		selectedServer.Name, selectedServer.Address, selectedServer.Port, selectedServer.Protocol, selectedServer.Tag)
+	messageFormatter := NewMessageFormatter()
+	message = messageFormatter.FormatServerStatusMessage(selectedServer, nil)
+	message += "\n🟢 Status: Active and ready\n⚡ Service: Xray restarted successfully\n\n🎉 You are now connected to the new server!"
 
-	keyboard := &models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{
-				{Text: "📊 Test Connection", CallbackData: "ping_test"},
-				{Text: "📋 Server List", CallbackData: "refresh"},
-			},
-			{
-				{Text: "🏠 Main Menu", CallbackData: "main_menu"},
-			},
-		},
+	navigationHelper := NewNavigationHelper()
+	keyboard := navigationHelper.CreateServerStatusNavigationKeyboard(true)
+
+	successContent := MessageContent{
+		Text:        message,
+		ReplyMarkup: keyboard,
+		Type:        MessageTypeStatus,
 	}
 
-	_, err = b.EditMessageText(ctx, &bot.EditMessageTextParams{
-		ChatID:    progressMsg.Chat.ID,
-		MessageID: progressMsg.ID,
-		Text:      message,
-
-		ReplyMarkup: keyboard,
-	})
-
-	if err != nil {
-		tb.logger.Error("Failed to edit server switch success message: %v", err)
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, successContent); err != nil {
+		tb.logger.Error("Failed to send server switch success message: %v", err)
 	} else {
 		tb.logger.Info("Successfully completed server switch to %s for user %d", selectedServer.Name, chatID)
 	}
 }
 
-func (tb *TelegramBot) createProgressBar(percentage int, length int) string {
-	if percentage < 0 {
-		percentage = 0
-	}
-	if percentage > 100 {
-		percentage = 100
-	}
-
-	filled := (percentage * length) / 100
-	empty := length - filled
-
-	bar := "["
-	bar += strings.Repeat("█", filled)
-	bar += strings.Repeat("░", empty)
-	bar += "]"
-
-	return bar
-}
-
-func (tb *TelegramBot) sendErrorMessage(ctx context.Context, b *bot.Bot, chatID int64, title, description, retryAction string) {
+func (tb *TelegramBot) sendErrorMessage(ctx context.Context, _ *bot.Bot, chatID int64, title, description, retryAction string) {
 	tb.logger.Debug("Sending error message to user %d: %s - %s", chatID, title, description)
-	message := fmt.Sprintf("❌ %s\n\n🔴 Error: %s", title, description)
 
-	var keyboard *models.InlineKeyboardMarkup
-	switch retryAction {
-	case "refresh":
-		keyboard = &models.InlineKeyboardMarkup{
-			InlineKeyboard: [][]models.InlineKeyboardButton{
-				{
-					{Text: "🔄 Refresh Servers", CallbackData: "refresh"},
-					{Text: "🏠 Main Menu", CallbackData: "main_menu"},
-				},
-			},
-		}
-	case "ping_test":
-		keyboard = &models.InlineKeyboardMarkup{
-			InlineKeyboard: [][]models.InlineKeyboardButton{
-				{
-					{Text: "🔄 Retry Ping Test", CallbackData: "ping_test"},
-					{Text: "📋 Server List", CallbackData: "refresh"},
-				},
-				{
-					{Text: "🏠 Main Menu", CallbackData: "main_menu"},
-				},
-			},
-		}
-	default:
-		keyboard = &models.InlineKeyboardMarkup{
-			InlineKeyboard: [][]models.InlineKeyboardButton{
-				{
-					{Text: "🏠 Main Menu", CallbackData: "main_menu"},
-				},
-			},
-		}
+	// Use MessageFormatter for consistent error formatting
+	messageFormatter := NewMessageFormatter()
+	suggestions := []string{
+		"Try the retry button below",
+		"Check your connection and try again",
+		"Return to main menu if the issue persists",
+	}
+	message := messageFormatter.FormatErrorMessage(title, description, suggestions)
+
+	// Use NavigationHelper for enhanced error navigation
+	navigationHelper := NewNavigationHelper()
+	keyboard := navigationHelper.CreateErrorNavigationKeyboard("general", retryAction)
+
+	errorContent := MessageContent{
+		Text:        message,
+		ReplyMarkup: keyboard,
+		Type:        MessageTypeStatus,
 	}
 
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   message,
-
-		ReplyMarkup: keyboard,
-	})
-
-	if err != nil {
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, errorContent); err != nil {
 		tb.logger.Error("Failed to send error message '%s': %v", title, err)
 	} else {
 		tb.logger.Debug("Successfully sent error message '%s' to user %d", title, chatID)
 	}
 }
 
-func (tb *TelegramBot) sendSwitchErrorMessage(ctx context.Context, b *bot.Bot, chatID int64, server *types.Server, err error) {
+func (tb *TelegramBot) sendSwitchErrorMessage(ctx context.Context, _ *bot.Bot, chatID int64, server *types.Server, err error) {
 	tb.logger.Error("Sending server switch error message to user %d for server %s: %v", chatID, server.Name, err)
-	message := fmt.Sprintf("❌ Server Switch Failed\n\n🏷️ Server: %s\n🌐 Address: %s:%d\n\n🔴 Error Details:\n%v\n\n💡 Suggestions:\n• Check if the server is accessible\n• Try a different server\n• Refresh the server list\n• Check your network connection",
-		server.Name, server.Address, server.Port, err)
+	messageFormatter := NewMessageFormatter()
+	suggestions := []string{
+		"Check if the server is accessible",
+		"Try a different server",
+		"Refresh the server list",
+		"Check your network connection",
+	}
+	errorMessage := messageFormatter.FormatErrorMessage("Server Switch Failed", err.Error(), suggestions)
+	message := fmt.Sprintf("❌ Server Switch Failed\n\n🏷️ Server: %s\n🌐 Address: %s:%d\n\n%s",
+		server.Name, server.Address, server.Port, errorMessage)
 
-	keyboard := &models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{
-				{Text: "🔄 Try Different Server", CallbackData: "refresh"},
-				{Text: "📊 Test Servers", CallbackData: "ping_test"},
-			},
-			{
-				{Text: "🏠 Main Menu", CallbackData: "main_menu"},
-			},
-		},
+	navigationHelper := NewNavigationHelper()
+	keyboard := navigationHelper.CreateErrorNavigationKeyboard("server_switch", "refresh")
+
+	switchErrorContent := MessageContent{
+		Text:        message,
+		ReplyMarkup: keyboard,
+		Type:        MessageTypeStatus,
 	}
 
-	_, sendErr := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   message,
-
-		ReplyMarkup: keyboard,
-	})
-
-	if sendErr != nil {
+	if sendErr := tb.messageManager.SendOrEdit(ctx, chatID, switchErrorContent); sendErr != nil {
 		tb.logger.Error("Failed to send server switch error message for %s: %v", server.Name, sendErr)
 	} else {
 		tb.logger.Info("Successfully sent server switch error message for %s to user %d", server.Name, chatID)
+	}
+}
+func (tb *TelegramBot) handleUpdateMenuCallback(ctx context.Context, b *bot.Bot, chatID int64, callbackQueryID string) {
+	tb.logger.Info("Processing update menu callback for user %d", chatID)
+
+	_, _ = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+		CallbackQueryID: callbackQueryID,
+		Text:            "🔄 Update options",
+	})
+
+	// Show update menu with options
+	message := "🔄 Bot Update Options\n\n" +
+		"Choose an action:\n\n" +
+		"📊 **Check Status**: View current update status\n" +
+		"🔄 **Start Update**: Begin bot update process\n" +
+		"ℹ️ **Information**: View update details\n\n" +
+		"⚠️ **Note**: Updates will briefly interrupt bot service"
+
+	navigationHelper := NewNavigationHelper()
+	keyboard := navigationHelper.CreateUpdateNavigationKeyboard("status")
+
+	updateMenuContent := MessageContent{
+		Text:        message,
+		ReplyMarkup: keyboard,
+		Type:        MessageTypeMenu,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, updateMenuContent); err != nil {
+		tb.logger.Error("Failed to send update menu: %v", err)
+	} else {
+		tb.logger.Info("Successfully sent update menu to user %d", chatID)
+	}
+}
+
+func (tb *TelegramBot) handleStatusCallback(ctx context.Context, b *bot.Bot, chatID int64, callbackQueryID string) {
+	tb.logger.Info("Processing status callback for user %d", chatID)
+
+	_, _ = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+		CallbackQueryID: callbackQueryID,
+		Text:            "📊 Checking status...",
+	})
+
+	// This is similar to the /status command but accessed via callback
+	currentServer := tb.serverMgr.GetCurrentServer()
+	if currentServer == nil {
+		tb.logger.Debug("No active server found for status callback")
+
+		messageFormatter := NewMessageFormatter()
+		suggestions := []string{
+			"Use server list to select a server",
+			"Test server connections",
+			"Refresh server configuration",
+		}
+		message := messageFormatter.FormatErrorMessage("No Active Server",
+			"No server is currently selected or active", suggestions)
+
+		navigationHelper := NewNavigationHelper()
+		keyboard := navigationHelper.CreateErrorNavigationKeyboard("no_servers", "refresh")
+
+		noServerContent := MessageContent{
+			Text:        message,
+			ReplyMarkup: keyboard,
+			Type:        MessageTypeStatus,
+		}
+
+		_ = tb.messageManager.SendOrEdit(ctx, chatID, noServerContent)
+		return
+	}
+
+	tb.logger.Debug("Found active server: %s (%s:%d) for status callback",
+		currentServer.Name, currentServer.Address, currentServer.Port)
+
+	messageFormatter := NewMessageFormatter()
+	message := messageFormatter.FormatServerStatusMessage(currentServer, nil)
+
+	// Show loading state first
+	loadingContent := MessageContent{
+		Text: message + "\n\n🔄 Testing connection...",
+		Type: MessageTypeStatus,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, loadingContent); err != nil {
+		tb.logger.Error("Failed to send initial status message: %v", err)
+		return
+	}
+
+	tb.logger.Debug("Starting ping test for server %s", currentServer.Name)
+
+	results, err := tb.serverMgr.TestPing()
+	if err != nil {
+		tb.logger.Error("Ping test failed for status callback: %v", err)
+
+		suggestions := []string{
+			"Check your internet connection",
+			"Try a different server",
+			"Refresh server list",
+		}
+		errorMessage := messageFormatter.FormatErrorMessage("Connection Test Failed", err.Error(), suggestions)
+
+		navigationHelper := NewNavigationHelper()
+		keyboard := navigationHelper.CreateErrorNavigationKeyboard("ping_test", "ping_test")
+
+		errorContent := MessageContent{
+			Text:        errorMessage,
+			ReplyMarkup: keyboard,
+			Type:        MessageTypeStatus,
+		}
+
+		_ = tb.messageManager.SendOrEdit(ctx, chatID, errorContent)
+		return
+	}
+
+	var currentResult *types.PingResult
+	for _, result := range results {
+		if result.Server.ID == currentServer.ID {
+			currentResult = &result
+			break
+		}
+	}
+
+	if currentResult == nil {
+		tb.logger.Warn("Current server not found in ping results for status callback")
+
+		updatedMessage := messageFormatter.FormatServerStatusMessage(currentServer, nil)
+		updatedMessage += "\n⚠️ Warning\n" +
+			"└ Server not found in available servers\n" +
+			"└ Configuration may have changed"
+
+		navigationHelper := NewNavigationHelper()
+		keyboard := navigationHelper.CreateErrorNavigationKeyboard("server_load", "refresh")
+
+		warningContent := MessageContent{
+			Text:        updatedMessage,
+			ReplyMarkup: keyboard,
+			Type:        MessageTypeStatus,
+		}
+
+		_ = tb.messageManager.SendOrEdit(ctx, chatID, warningContent)
+		return
+	}
+
+	// Show final results
+	finalMessage := messageFormatter.FormatServerStatusMessage(currentServer, currentResult)
+
+	navigationHelper := NewNavigationHelper()
+	keyboard := navigationHelper.CreateServerStatusNavigationKeyboard(true)
+
+	// Add next action suggestions
+	nextActions := navigationHelper.CreateNextActionSuggestions("status_checked", currentResult.Available)
+	if len(nextActions) > 0 {
+		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, nextActions)
+	}
+
+	statusContent := MessageContent{
+		Text:        finalMessage,
+		ReplyMarkup: keyboard,
+		Type:        MessageTypeStatus,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, statusContent); err != nil {
+		tb.logger.Error("Failed to send final status message: %v", err)
+	} else {
+		tb.logger.Info("Successfully sent server status to user %d", chatID)
 	}
 }

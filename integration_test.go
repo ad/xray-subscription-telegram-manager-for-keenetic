@@ -381,6 +381,10 @@ func TestPingTestingWorkflow(t *testing.T) {
 		"subscription_url": mockHTTPServer.URL(),
 		"log_level":        "info",
 		"ping_timeout":     2,
+		"ui": map[string]interface{}{
+			"enable_name_optimization":    false, // Disable name optimization for this test
+			"name_optimization_threshold": 0.7,   // Set threshold to avoid default override
+		},
 	}
 
 	configJSON, err := json.MarshalIndent(configData, "", "    ")

@@ -1,4 +1,5 @@
 package server
+
 import (
 	"context"
 	"fmt"
@@ -9,9 +10,11 @@ import (
 	"xray-telegram-manager/config"
 	"xray-telegram-manager/types"
 )
+
 type PingTesterImpl struct {
 	config *config.Config
 }
+
 func NewPingTester(cfg *config.Config) *PingTesterImpl {
 	return &PingTesterImpl{
 		config: cfg,
@@ -69,7 +72,10 @@ func (pt *PingTesterImpl) TestServer(server types.Server) types.PingResult {
 		result.Latency = 0
 		return result
 	}
-	conn.Close()
+	if err := conn.Close(); err != nil {
+		// Connection already closed or error occurred - this is expected
+		_ = err
+	}
 	result.Available = true
 	result.Latency = latency.Milliseconds()
 	result.Error = nil

@@ -1,4 +1,5 @@
 package server
+
 import (
 	"encoding/base64"
 	"fmt"
@@ -10,11 +11,13 @@ import (
 	"xray-telegram-manager/config"
 	"xray-telegram-manager/types"
 )
+
 type MockHTTPServer struct {
 	server   *httptest.Server
 	response string
 	status   int
 }
+
 func NewMockHTTPServer(response string, status int) *MockHTTPServer {
 	mock := &MockHTTPServer{
 		response: response,
@@ -22,7 +25,10 @@ func NewMockHTTPServer(response string, status int) *MockHTTPServer {
 	}
 	mock.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(mock.status)
-		w.Write([]byte(mock.response))
+		if _, err := w.Write([]byte(mock.response)); err != nil {
+			// Log error but continue serving - this is expected in tests
+			_ = err
+		}
 	}))
 	return mock
 }
@@ -41,6 +47,7 @@ func CreateMockSubscriptionServer(vlessUrls []string) *MockHTTPServer {
 	base64Data := base64.StdEncoding.EncodeToString([]byte(data))
 	return NewMockHTTPServer(base64Data, http.StatusOK)
 }
+
 type MockTCPServer struct {
 	listener net.Listener
 	address  string
@@ -48,6 +55,7 @@ type MockTCPServer struct {
 	running  bool
 	delay    time.Duration
 }
+
 func NewMockTCPServer() (*MockTCPServer, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -80,7 +88,10 @@ func (m *MockTCPServer) Start() {
 			if m.delay > 0 {
 				time.Sleep(m.delay)
 			}
-			conn.Close()
+			if err := conn.Close(); err != nil {
+				// Connection already closed or error occurred - this is expected
+				_ = err
+			}
 		}
 	}()
 }
@@ -89,7 +100,10 @@ func (m *MockTCPServer) Stop() {
 		return
 	}
 	m.running = false
-	m.listener.Close()
+	if err := m.listener.Close(); err != nil {
+		// Listener already closed or error occurred - this is expected
+		_ = err
+	}
 }
 func (m *MockTCPServer) Address() string {
 	return m.address
@@ -100,11 +114,13 @@ func (m *MockTCPServer) Port() int {
 func (m *MockTCPServer) SetDelay(delay time.Duration) {
 	m.delay = delay
 }
+
 type MockPingTester struct {
 	config      *config.Config
 	mockServers map[string]*MockTCPServer
 	results     map[string]types.PingResult
 }
+
 func NewMockPingTester(cfg *config.Config) *MockPingTester {
 	return &MockPingTester{
 		config:      cfg,
@@ -191,11 +207,13 @@ func (m *MockPingTester) Cleanup() {
 	m.mockServers = make(map[string]*MockTCPServer)
 	m.results = make(map[string]types.PingResult)
 }
+
 type MockSubscriptionLoader struct {
 	config  *config.Config
 	servers []types.Server
 	error   error
 }
+
 func NewMockSubscriptionLoader(cfg *config.Config) *MockSubscriptionLoader {
 	return &MockSubscriptionLoader{
 		config:  cfg,

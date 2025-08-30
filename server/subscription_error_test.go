@@ -21,7 +21,9 @@ func TestSubscriptionLoader_RetryLogic(t *testing.T) {
 		}
 		// Succeed on 3rd attempt
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("dmxlc3M6Ly9lYzgyYmNhOC0xMDcyLTQ2ODItODIyZi0zMDMwNmFmNDA4ZWFAMTI3LjAuMDM6ODA4MD90eXBlPXRjcCZzZWN1cml0eT1ub25lI1Rlc3QlMjBTZXJ2ZXI=")) // base64 encoded VLESS URL
+		if _, err := w.Write([]byte("dmxlc3M6Ly9lYzgyYmNhOC0xMDcyLTQ2ODItODIyZi0zMDMwNmFmNDA4ZWFAMTI3LjAuMDM6ODA4MD90eXBlPXRjcCZzZWN1cml0eT1ub25lI1Rlc3QlMjBTZXJ2ZXI=")); err != nil { // base64 encoded VLESS URL
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -127,7 +129,9 @@ func TestSubscriptionLoader_NetworkErrorWithoutCache(t *testing.T) {
 func TestSubscriptionLoader_InvalidBase64WithCache(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("invalid-base64-data!!!"))
+		if _, err := w.Write([]byte("invalid-base64-data!!!")); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -169,7 +173,9 @@ func TestSubscriptionLoader_CachePersistence(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(base64Data))
+		if _, err := w.Write([]byte(base64Data)); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -225,7 +231,9 @@ func TestSubscriptionLoader_CacheExpiration(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(base64Data))
+		if _, err := w.Write([]byte(base64Data)); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
