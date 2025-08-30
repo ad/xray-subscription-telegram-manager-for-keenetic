@@ -7,16 +7,16 @@ on:
   workflow_dispatch:
     inputs:
       version_type:
-        description: 'Version bump type'
+        description: "Version bump type"
         required: true
-        default: 'minor'
+        default: "minor"
         type: choice
         options:
           - patch
           - minor
           - major
       prerelease:
-        description: 'Create as prerelease'
+        description: "Create as prerelease"
         required: false
         default: false
         type: boolean
@@ -31,7 +31,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     outputs:
       new_tag: ${{ steps.bump.outputs.new_tag }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -50,17 +50,17 @@ jobs:
           # Get the latest tag
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "Latest tag: $LATEST_TAG"
-          
+
           # Remove 'v' prefix and split version
           VERSION=${LATEST_TAG#v}
           IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
-          
+
           MAJOR=${VERSION_PARTS[0]:-0}
           MINOR=${VERSION_PARTS[1]:-0}
           PATCH=${VERSION_PARTS[2]:-0}
-          
+
           echo "Current version: $MAJOR.$MINOR.$PATCH"
-          
+
           # Bump version based on input
           case "${{ github.event.inputs.version_type }}" in
             "major")
@@ -76,17 +76,17 @@ jobs:
               PATCH=$((PATCH + 1))
               ;;
           esac
-          
+
           NEW_VERSION="v$MAJOR.$MINOR.$PATCH"
-          
+
           # Add prerelease suffix if requested
           if [ "${{ github.event.inputs.prerelease }}" = "true" ]; then
             NEW_VERSION="$NEW_VERSION-rc.$(date +%Y%m%d%H%M%S)"
           fi
-          
+
           echo "New version: $NEW_VERSION"
           echo "new_tag=$NEW_VERSION" >> $GITHUB_OUTPUT
-          
+
           # Create and push tag
           git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
           git push origin "$NEW_VERSION"
@@ -94,7 +94,7 @@ jobs:
   build-and-release:
     name: Build and Release
     runs-on: ubuntu-latest
-    needs: 
+    needs:
       - bump-version
     if: always() && !cancelled() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && needs.bump-version.result == 'success'))
 
@@ -128,7 +128,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "1.24"
-          cache: false  # Disable automatic caching to prevent conflicts
+          cache: false # Disable automatic caching to prevent conflicts
 
       # Temporarily disable Go caching completely to fix conflicts
       # - name: Cache Go modules
@@ -174,12 +174,12 @@ jobs:
         run: |
           # Clear any existing Go cache completely
           go clean -cache -modcache || true
-          
+
           # Create isolated work directory
           mkdir -p /tmp/build-${{ matrix.suffix }}
           cd /tmp/build-${{ matrix.suffix }}
           cp -r $GITHUB_WORKSPACE/* .
-          
+
           # Download dependencies fresh every time
           go mod download
 
@@ -211,10 +211,10 @@ jobs:
       - name: Compress binary with UPX
         run: |
           cd /tmp/build-${{ matrix.suffix }}
-          
+
           # Verify UPX is available
           which upx || (echo "UPX not found in PATH" && exit 1)
-          
+
           # Create a copy of the binary before compression (as backup)
           cp xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }} \
              xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.backup
@@ -252,7 +252,7 @@ jobs:
           # Clean up isolated directories
           rm -rf /tmp/build-${{ matrix.suffix }} 2>/dev/null || true
           rm -rf /tmp/upx-${{ matrix.suffix }}-${{ github.run_id }} 2>/dev/null || true
-          
+
           # Clean Go caches completely
           go clean -cache -modcache || true
 
@@ -281,7 +281,7 @@ jobs:
         id: release_notes
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          
+
           # Get the previous tag
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
 
@@ -338,7 +338,7 @@ jobs:
         run: |
           mkdir -p final-assets
           find release-assets -type f -name "xray-telegram-manager-*" -exec cp {} final-assets/ \;
-          
+
           # Debug: List all files
           echo "=== Debug: All files in release-assets ==="
           find release-assets -type f -ls
@@ -346,22 +346,54 @@ jobs:
           ls -la final-assets/
           echo "=== Debug: Version is ${{ steps.version.outputs.VERSION }} ==="
 
-          # Create tar.gz archives for each architecture
+          # Detect actual version from files (fallback if version detection fails)
           cd final-assets
+          DETECTED_VERSION=""
+          for file in xray-telegram-manager-v*-mips-softfloat; do
+            if [ -f "$file" ]; then
+              # Extract full version including suffixes like -dirty, -rc, etc.
+              # This regex captures everything between 'xray-telegram-manager-' and '-mips-softfloat'
+              DETECTED_VERSION=$(echo "$file" | sed 's/xray-telegram-manager-\(.*\)-mips-softfloat/\1/')
+              break
+            fi
+          done
+
+          # Use detected version if available, otherwise use the provided version
+          if [ -n "$DETECTED_VERSION" ]; then
+            echo "=== Using detected version: $DETECTED_VERSION ==="
+            VERSION="$DETECTED_VERSION"
+          else
+            echo "=== Using provided version: ${{ steps.version.outputs.VERSION }} ==="
+            VERSION="${{ steps.version.outputs.VERSION }}"
+          fi
+
+          # Create tar.gz archives for each architecture
           for arch in mips-softfloat mips-hardfloat mipsle-softfloat mipsle-hardfloat; do
             echo "=== Processing architecture: $arch ==="
-            if [ -f "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}" ]; then
-              echo "✅ Found binary for $arch"
+            binary_name="xray-telegram-manager-${VERSION}-${arch}"
+            
+            if [ -f "$binary_name" ]; then
+              echo "✅ Found binary for $arch: $binary_name"
               
               # Create temporary directory for archive contents
               mkdir -p "archive-${arch}"
               
-              # Copy binary
-              cp "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}" "archive-${arch}/xray-telegram-manager"
+              # Copy binary and rename to generic name
+              cp "$binary_name" "archive-${arch}/xray-telegram-manager"
+              chmod +x "archive-${arch}/xray-telegram-manager"
               
               # Copy checksums
-              cp "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}.sha256" "archive-${arch}/" || echo "⚠️ No SHA256 for $arch"
-              cp "xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${arch}.md5" "archive-${arch}/" || echo "⚠️ No MD5 for $arch"
+              if [ -f "${binary_name}.sha256" ]; then
+                cp "${binary_name}.sha256" "archive-${arch}/"
+              else
+                echo "⚠️ No SHA256 for $arch"
+              fi
+              
+              if [ -f "${binary_name}.md5" ]; then
+                cp "${binary_name}.md5" "archive-${arch}/"
+              else
+                echo "⚠️ No MD5 for $arch"
+              fi
               
               # Copy installation scripts (check if scripts directory exists)
               if [ -d "../scripts" ]; then
@@ -387,6 +419,58 @@ jobs:
           }
           CONFIG_EOF
               
+              # Create README for the archive
+              cat > "archive-${arch}/README.md" << README_EOF
+          # Xray Telegram Manager for Keenetic Routers
+
+          Version: $VERSION
+          Architecture: $arch
+
+          ## Quick Installation
+
+          Run the installation script:
+          \`\`\`bash
+          chmod +x scripts/install.sh
+          ./scripts/install.sh
+          \`\`\`
+
+          ## Manual Installation
+
+          1. Copy the binary to /opt/bin/:
+             \`\`\`bash
+             cp xray-telegram-manager /opt/bin/
+             chmod +x /opt/bin/xray-telegram-manager
+             \`\`\`
+
+          2. Copy the sample config and edit it:
+             \`\`\`bash
+             mkdir -p /opt/etc/xray-manager
+             cp config/config.json.sample /opt/etc/xray-manager/config.json
+             vi /opt/etc/xray-manager/config.json
+             \`\`\`
+
+          3. Install the service:
+             \`\`\`bash
+             cp scripts/xray-telegram-manager.service /opt/etc/init.d/S99xray-telegram-manager
+             chmod +x /opt/etc/init.d/S99xray-telegram-manager
+             \`\`\`
+
+          4. Start the service:
+             \`\`\`bash
+             /opt/etc/init.d/S99xray-telegram-manager start
+             \`\`\`
+
+          ## Configuration
+
+          Edit \`/opt/etc/xray-manager/config.json\` with your:
+          - Telegram bot token
+          - Admin user ID  
+          - Subscription URL
+          - Xray config path
+
+          For detailed configuration options, see CONFIG.md in the repository.
+          README_EOF
+              
               # Create archive
               tar -czf "xray-telegram-manager-${arch}.tar.gz" -C "archive-${arch}" .
               
@@ -395,20 +479,34 @@ jobs:
               
               echo "✅ Created archive: xray-telegram-manager-${arch}.tar.gz"
             else
-              echo "❌ Binary not found for $arch"
+              echo "❌ Binary not found for $arch: $binary_name"
             fi
           done
 
           # Debug: List final files
           echo "=== Debug: Final files ==="
-          ls -la *.tar.gz
+          ls -la *.tar.gz 2>/dev/null || echo "No tar.gz files created"
 
           # Create a combined checksums file
-          echo "# SHA256 Checksums" > CHECKSUMS.txt
-          cat *.sha256 >> CHECKSUMS.txt
+          echo "# SHA256 Checksums for $VERSION" > CHECKSUMS.txt
+          echo "# Generated on $(date)" >> CHECKSUMS.txt
           echo "" >> CHECKSUMS.txt
-          echo "# MD5 Checksums" >> CHECKSUMS.txt
-          cat *.md5 >> CHECKSUMS.txt
+
+          if ls *.sha256 1> /dev/null 2>&1; then
+            cat *.sha256 >> CHECKSUMS.txt
+          else
+            echo "No SHA256 files found" >> CHECKSUMS.txt
+          fi
+
+          echo "" >> CHECKSUMS.txt
+          echo "# MD5 Checksums for $VERSION" >> CHECKSUMS.txt
+          echo "" >> CHECKSUMS.txt
+
+          if ls *.md5 1> /dev/null 2>&1; then
+            cat *.md5 >> CHECKSUMS.txt
+          else
+            echo "No MD5 files found" >> CHECKSUMS.txt
+          fi
 
       - name: Determine if prerelease
         id: prerelease
