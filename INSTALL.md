@@ -58,6 +58,10 @@ chmod +x quick-install.sh
    /opt/etc/init.d/S99xray-telegram-manager start
    ```
 
+4. **Для обновлений в будущем:**
+   - Используйте команду `/update` в Telegram боте
+   - Или повторите процесс установки для ручного обновления
+
 ## Архитектуры роутеров
 
 - **mips-softfloat** - большинство Keenetic (попробуйте сначала это)

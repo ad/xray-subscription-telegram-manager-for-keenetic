@@ -1,4 +1,5 @@
 package xray
+
 import (
 	"context"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"time"
 	"xray-telegram-manager/types"
 )
+
 type XrayController struct {
 	config ConfigProvider
 	mutex  sync.Mutex // Protects file operations
@@ -18,6 +20,7 @@ type ConfigProvider interface {
 	GetConfigPath() string
 	GetXrayRestartCommand() string
 }
+
 func NewXrayController(config ConfigProvider) *XrayController {
 	return &XrayController{
 		config: config,
@@ -63,7 +66,10 @@ func (xc *XrayController) RestartService() error {
 	select {
 	case <-ctx.Done():
 		if cmd.Process != nil {
-			cmd.Process.Kill()
+			if err := cmd.Process.Kill(); err != nil {
+				// Process kill failed, but we continue anyway - this is expected
+				_ = err
+			}
 		}
 		return fmt.Errorf("xray restart command timed out after 30 seconds")
 	case err := <-done:
@@ -158,7 +164,10 @@ func (xc *XrayController) writeFileAtomicUnsafe(filePath string, data []byte) er
 		return fmt.Errorf("failed to write temporary file: %w", err)
 	}
 	if err := os.Rename(tempPath, filePath); err != nil {
-		os.Remove(tempPath)
+		if err := os.Remove(tempPath); err != nil {
+			// Failed to remove temp file, but we continue anyway - this is expected
+			_ = err
+		}
 		return fmt.Errorf("failed to replace config file: %w", err)
 	}
 	return nil

@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"testing"
+	"xray-telegram-manager/config"
 	"xray-telegram-manager/types"
 
 	"github.com/go-telegram/bot/models"
@@ -19,6 +20,14 @@ func (m *MockConfig) GetAdminID() int64 {
 
 func (m *MockConfig) GetBotToken() string {
 	return m.botToken
+}
+
+func (m *MockConfig) GetUpdateConfig() config.UpdateConfig {
+	return config.UpdateConfig{
+		ScriptURL:      "https://example.com/update.sh",
+		TimeoutMinutes: 10,
+		BackupConfig:   true,
+	}
 }
 
 // MockServerManager implements ServerManager for testing
@@ -78,16 +87,32 @@ func (m *MockServerManager) TestPingWithProgress(progressCallback func(completed
 	return results, nil
 }
 
+func (m *MockServerManager) GetQuickSelectServers(results []types.PingResult, limit int) []types.PingResult {
+	// Simple mock implementation - just return available servers up to limit
+	available := make([]types.PingResult, 0)
+	for _, result := range results {
+		if result.Available {
+			available = append(available, result)
+		}
+	}
+	if limit > 0 && len(available) > limit {
+		return available[:limit]
+	}
+	return available
+}
+
 // MockTelegramBot for testing without actual API calls
 type MockTelegramBot struct {
-	config    ConfigProvider
-	serverMgr ServerManager
+	config              ConfigProvider
+	serverMgr           ServerManager
+	buttonTextProcessor *ButtonTextProcessor
 }
 
 func NewMockTelegramBot(config ConfigProvider, serverMgr ServerManager) *MockTelegramBot {
 	return &MockTelegramBot{
-		config:    config,
-		serverMgr: serverMgr,
+		config:              config,
+		serverMgr:           serverMgr,
+		buttonTextProcessor: NewButtonTextProcessor(50),
 	}
 }
 
@@ -111,10 +136,8 @@ func (tb *MockTelegramBot) createServerListKeyboard(servers []types.Server, _ in
 
 	// Add server buttons
 	for _, server := range servers {
-		buttonText := "🌐 " + server.Name
-		if len(buttonText) > 30 {
-			buttonText = buttonText[:27] + "..."
-		}
+		// Use ButtonTextProcessor for consistent emoji-aware text processing
+		buttonText := tb.buttonTextProcessor.ProcessServerButtonText(server.Name, "🌐", 30)
 
 		keyboard = append(keyboard, []models.InlineKeyboardButton{
 			{Text: buttonText, CallbackData: "server_" + server.ID},

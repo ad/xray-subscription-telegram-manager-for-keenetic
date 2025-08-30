@@ -17,7 +17,7 @@ func TestNewServerManager(t *testing.T) {
 		XrayRestartCommand:  "echo restart",
 		CacheDuration:       3600,
 		HealthCheckInterval: 300,
-		PingTimeout:     1,
+		PingTimeout:         1,
 	}
 
 	sm := NewServerManager(cfg)
@@ -62,7 +62,7 @@ func TestGetServers(t *testing.T) {
 		XrayRestartCommand:  "echo restart",
 		CacheDuration:       3600,
 		HealthCheckInterval: 300,
-		PingTimeout:     1,
+		PingTimeout:         1,
 	}
 
 	sm := NewServerManager(cfg)
@@ -122,7 +122,7 @@ func TestGetCurrentServer(t *testing.T) {
 		XrayRestartCommand:  "echo restart",
 		CacheDuration:       3600,
 		HealthCheckInterval: 300,
-		PingTimeout:     1,
+		PingTimeout:         1,
 	}
 
 	sm := NewServerManager(cfg)
@@ -176,7 +176,7 @@ func TestGetServerByID(t *testing.T) {
 		XrayRestartCommand:  "echo restart",
 		CacheDuration:       3600,
 		HealthCheckInterval: 300,
-		PingTimeout:     1,
+		PingTimeout:         1,
 	}
 
 	sm := NewServerManager(cfg)
@@ -237,7 +237,7 @@ func TestSetCurrentServer(t *testing.T) {
 		XrayRestartCommand:  "echo restart",
 		CacheDuration:       3600,
 		HealthCheckInterval: 300,
-		PingTimeout:     1,
+		PingTimeout:         1,
 	}
 
 	sm := NewServerManager(cfg)
@@ -277,5 +277,81 @@ func TestSetCurrentServer(t *testing.T) {
 	err = sm.SetCurrentServer("nonexistent")
 	if err == nil {
 		t.Error("Expected error when setting non-existent server as current")
+	}
+}
+func TestServerManager_SortingIntegration(t *testing.T) {
+	// Create test servers with names that should be sorted alphabetically
+	servers := []types.Server{
+		{ID: "3", Name: "Charlie Server", Address: "charlie.example.com", Port: 443},
+		{ID: "1", Name: "Alpha Server", Address: "alpha.example.com", Port: 443},
+		{ID: "2", Name: "Beta Server", Address: "beta.example.com", Port: 443},
+	}
+
+	// Create mock subscription loader that returns unsorted servers
+	mockLoader := &MockSubscriptionLoader{
+		servers: servers,
+	}
+
+	cfg := &config.Config{
+		UI: config.UIConfig{
+			EnableNameOptimization:    false, // Disable name optimization for this test
+			NameOptimizationThreshold: 0.7,
+		},
+	}
+
+	sm := NewServerManagerWithCacheDir(cfg, "/tmp/test")
+	sm.subscriptionLoader = mockLoader
+
+	// Load servers
+	err := sm.LoadServers()
+	if err != nil {
+		t.Fatalf("Failed to load servers: %v", err)
+	}
+
+	// Test that GetServers returns alphabetically sorted servers
+	sortedServers := sm.GetServers()
+	expectedOrder := []string{"Alpha Server", "Beta Server", "Charlie Server"}
+
+	if len(sortedServers) != len(expectedOrder) {
+		t.Fatalf("Expected %d servers, got %d", len(expectedOrder), len(sortedServers))
+	}
+
+	for i, expected := range expectedOrder {
+		if sortedServers[i].Name != expected {
+			t.Errorf("Server at position %d: expected %s, got %s", i, expected, sortedServers[i].Name)
+		}
+	}
+
+	// Test ping results sorting
+	// Create mock ping results with different latencies
+	mockResults := []types.PingResult{
+		{Server: servers[0], Available: true, Latency: 200}, // Charlie - slowest
+		{Server: servers[1], Available: true, Latency: 50},  // Alpha - fastest
+		{Server: servers[2], Available: false, Latency: 0},  // Beta - unavailable
+	}
+
+	// Test GetQuickSelectServers
+	quickSelect := sm.GetQuickSelectServers(mockResults, 2)
+
+	// Should return only available servers, sorted by speed
+	if len(quickSelect) != 2 {
+		t.Fatalf("Expected 2 quick select servers, got %d", len(quickSelect))
+	}
+
+	// First should be Alpha (fastest)
+	if quickSelect[0].Server.Name != "Alpha Server" {
+		t.Errorf("First quick select server should be Alpha Server, got %s", quickSelect[0].Server.Name)
+	}
+
+	// Second should be Charlie (slower but available)
+	if quickSelect[1].Server.Name != "Charlie Server" {
+		t.Errorf("Second quick select server should be Charlie Server, got %s", quickSelect[1].Server.Name)
+	}
+
+	// Test that unavailable servers are not included in quick select
+	for _, result := range quickSelect {
+		if !result.Available {
+			t.Error("Quick select should not include unavailable servers")
+		}
 	}
 }

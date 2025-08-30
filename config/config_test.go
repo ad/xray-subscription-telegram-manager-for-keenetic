@@ -22,6 +22,37 @@ func TestSetDefaults(t *testing.T) {
 	if config.PingTimeout != 5 {
 		t.Errorf("Expected default PingTimeout 5, got %d", config.PingTimeout)
 	}
+
+	// Test UI defaults
+	if config.UI.MaxButtonTextLength != 50 {
+		t.Errorf("Expected default MaxButtonTextLength 50, got %d", config.UI.MaxButtonTextLength)
+	}
+	if config.UI.ServersPerPage != 32 {
+		t.Errorf("Expected default ServersPerPage 32, got %d", config.UI.ServersPerPage)
+	}
+	if config.UI.MaxQuickSelectServers != 10 {
+		t.Errorf("Expected default MaxQuickSelectServers 10, got %d", config.UI.MaxQuickSelectServers)
+	}
+	if config.UI.MessageTimeoutMinutes != 60 {
+		t.Errorf("Expected default MessageTimeoutMinutes 60, got %d", config.UI.MessageTimeoutMinutes)
+	}
+	if !config.UI.EnableNameOptimization {
+		t.Error("Expected default EnableNameOptimization to be true")
+	}
+	if config.UI.NameOptimizationThreshold != 0.7 {
+		t.Errorf("Expected default NameOptimizationThreshold 0.7, got %f", config.UI.NameOptimizationThreshold)
+	}
+
+	// Test Update defaults
+	if config.Update.ScriptURL != "https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh" {
+		t.Errorf("Expected default Update ScriptURL, got %s", config.Update.ScriptURL)
+	}
+	if config.Update.TimeoutMinutes != 10 {
+		t.Errorf("Expected default Update TimeoutMinutes 10, got %d", config.Update.TimeoutMinutes)
+	}
+	if config.Update.BackupConfig {
+		t.Error("Expected default Update BackupConfig to be false")
+	}
 }
 
 func TestValidate(t *testing.T) {
@@ -33,6 +64,19 @@ func TestValidate(t *testing.T) {
 		SubscriptionURL: "https://example.com/config.txt",
 		LogLevel:        "info",
 		PingTimeout:     5,
+		UI: UIConfig{
+			MaxButtonTextLength:       50,
+			ServersPerPage:            32,
+			MaxQuickSelectServers:     10,
+			MessageTimeoutMinutes:     60,
+			EnableNameOptimization:    true,
+			NameOptimizationThreshold: 0.7,
+		},
+		Update: UpdateConfig{
+			ScriptURL:      "https://example.com/script.sh",
+			TimeoutMinutes: 10,
+			BackupConfig:   false,
+		},
 	}
 
 	if err := config.Validate(); err != nil {
@@ -53,6 +97,19 @@ func TestValidate(t *testing.T) {
 		SubscriptionURL: "https://example.com/config.txt",
 		LogLevel:        "invalid",
 		PingTimeout:     5,
+		UI: UIConfig{
+			MaxButtonTextLength:       50,
+			ServersPerPage:            32,
+			MaxQuickSelectServers:     10,
+			MessageTimeoutMinutes:     60,
+			EnableNameOptimization:    true,
+			NameOptimizationThreshold: 0.7,
+		},
+		Update: UpdateConfig{
+			ScriptURL:      "https://example.com/script.sh",
+			TimeoutMinutes: 10,
+			BackupConfig:   false,
+		},
 	}
 	if err := invalidLogConfig.Validate(); err == nil {
 		t.Error("Expected validation to fail for invalid log level")
@@ -61,7 +118,11 @@ func TestValidate(t *testing.T) {
 
 func TestCreateTemplate(t *testing.T) {
 	tempFile := "/tmp/test_config.json"
-	defer os.Remove(tempFile)
+	defer func() {
+		if err := os.Remove(tempFile); err != nil {
+			t.Logf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	err := CreateTemplate(tempFile)
 	if err != nil {
@@ -147,7 +208,11 @@ func TestLoadConfig_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tempFile := "/tmp/test_config_" + tt.name + ".json"
-			defer os.Remove(tempFile)
+			defer func() {
+				if err := os.Remove(tempFile); err != nil {
+					t.Logf("Failed to remove temp file: %v", err)
+				}
+			}()
 
 			// Setup file if needed
 			if tt.setupFunc != nil {
@@ -214,6 +279,19 @@ func TestValidate_DetailedCases(t *testing.T) {
 				SubscriptionURL: "https://example.com/config.txt",
 				LogLevel:        "info",
 				PingTimeout:     5,
+				UI: UIConfig{
+					MaxButtonTextLength:       50,
+					ServersPerPage:            32,
+					MaxQuickSelectServers:     10,
+					MessageTimeoutMinutes:     60,
+					EnableNameOptimization:    true,
+					NameOptimizationThreshold: 0.7,
+				},
+				Update: UpdateConfig{
+					ScriptURL:      "https://example.com/script.sh",
+					TimeoutMinutes: 10,
+					BackupConfig:   false,
+				},
 			},
 			expectError: false,
 		},
@@ -331,6 +409,19 @@ func TestValidate_DetailedCases(t *testing.T) {
 				CacheDuration:       7200,
 				HealthCheckInterval: 300,
 				PingTimeout:         10,
+				UI: UIConfig{
+					MaxButtonTextLength:       75,
+					ServersPerPage:            25,
+					MaxQuickSelectServers:     15,
+					MessageTimeoutMinutes:     90,
+					EnableNameOptimization:    false,
+					NameOptimizationThreshold: 0.8,
+				},
+				Update: UpdateConfig{
+					ScriptURL:      "https://example.com/script.sh",
+					TimeoutMinutes: 15,
+					BackupConfig:   true,
+				},
 			},
 			expectError: false,
 		},
@@ -415,5 +506,249 @@ func TestSetDefaults_Comprehensive(t *testing.T) {
 
 	if emptyConfig.XrayRestartCommand != "/opt/etc/init.d/S24xray restart" {
 		t.Errorf("Expected default XrayRestartCommand, got %s", emptyConfig.XrayRestartCommand)
+	}
+}
+
+// TestUIConfigValidation tests UI configuration validation
+func TestUIConfigValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		uiConfig    UIConfig
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "Valid UI config",
+			uiConfig: UIConfig{
+				MaxButtonTextLength:       50,
+				ServersPerPage:            32,
+				MaxQuickSelectServers:     10,
+				MessageTimeoutMinutes:     60,
+				EnableNameOptimization:    true,
+				NameOptimizationThreshold: 0.7,
+			},
+			expectError: false,
+		},
+		{
+			name: "Invalid MaxButtonTextLength - zero",
+			uiConfig: UIConfig{
+				MaxButtonTextLength:       0,
+				ServersPerPage:            32,
+				MaxQuickSelectServers:     10,
+				MessageTimeoutMinutes:     60,
+				EnableNameOptimization:    true,
+				NameOptimizationThreshold: 0.7,
+			},
+			expectError: true,
+			errorMsg:    "max_button_text_length must be positive",
+		},
+		{
+			name: "Invalid MaxButtonTextLength - too large",
+			uiConfig: UIConfig{
+				MaxButtonTextLength:       250,
+				ServersPerPage:            32,
+				MaxQuickSelectServers:     10,
+				MessageTimeoutMinutes:     60,
+				EnableNameOptimization:    true,
+				NameOptimizationThreshold: 0.7,
+			},
+			expectError: true,
+			errorMsg:    "max_button_text_length cannot exceed 200",
+		},
+		{
+			name: "Invalid ServersPerPage - zero",
+			uiConfig: UIConfig{
+				MaxButtonTextLength:       50,
+				ServersPerPage:            0,
+				MaxQuickSelectServers:     10,
+				MessageTimeoutMinutes:     60,
+				EnableNameOptimization:    true,
+				NameOptimizationThreshold: 0.7,
+			},
+			expectError: true,
+			errorMsg:    "servers_per_page must be positive",
+		},
+		{
+			name: "Invalid ServersPerPage - too large",
+			uiConfig: UIConfig{
+				MaxButtonTextLength:       50,
+				ServersPerPage:            150,
+				MaxQuickSelectServers:     10,
+				MessageTimeoutMinutes:     60,
+				EnableNameOptimization:    true,
+				NameOptimizationThreshold: 0.7,
+			},
+			expectError: true,
+			errorMsg:    "servers_per_page cannot exceed 100",
+		},
+		{
+			name: "Invalid MaxQuickSelectServers - zero",
+			uiConfig: UIConfig{
+				MaxButtonTextLength:       50,
+				ServersPerPage:            32,
+				MaxQuickSelectServers:     0,
+				MessageTimeoutMinutes:     60,
+				EnableNameOptimization:    true,
+				NameOptimizationThreshold: 0.7,
+			},
+			expectError: true,
+			errorMsg:    "max_quick_select_servers must be positive",
+		},
+		{
+			name: "Invalid MaxQuickSelectServers - too large",
+			uiConfig: UIConfig{
+				MaxButtonTextLength:       50,
+				ServersPerPage:            32,
+				MaxQuickSelectServers:     60,
+				MessageTimeoutMinutes:     60,
+				EnableNameOptimization:    true,
+				NameOptimizationThreshold: 0.7,
+			},
+			expectError: true,
+			errorMsg:    "max_quick_select_servers cannot exceed 50",
+		},
+		{
+			name: "Invalid MessageTimeoutMinutes - zero",
+			uiConfig: UIConfig{
+				MaxButtonTextLength:       50,
+				ServersPerPage:            32,
+				MaxQuickSelectServers:     10,
+				MessageTimeoutMinutes:     0,
+				EnableNameOptimization:    true,
+				NameOptimizationThreshold: 0.7,
+			},
+			expectError: true,
+			errorMsg:    "message_timeout_minutes must be positive",
+		},
+		{
+			name: "Invalid MessageTimeoutMinutes - too large",
+			uiConfig: UIConfig{
+				MaxButtonTextLength:       50,
+				ServersPerPage:            32,
+				MaxQuickSelectServers:     10,
+				MessageTimeoutMinutes:     1500,
+				EnableNameOptimization:    true,
+				NameOptimizationThreshold: 0.7,
+			},
+			expectError: true,
+			errorMsg:    "message_timeout_minutes cannot exceed 1440",
+		},
+		{
+			name: "Invalid NameOptimizationThreshold - negative",
+			uiConfig: UIConfig{
+				MaxButtonTextLength:       50,
+				ServersPerPage:            32,
+				MaxQuickSelectServers:     10,
+				MessageTimeoutMinutes:     60,
+				EnableNameOptimization:    true,
+				NameOptimizationThreshold: -0.1,
+			},
+			expectError: true,
+			errorMsg:    "name_optimization_threshold must be between 0 and 1",
+		},
+		{
+			name: "Invalid NameOptimizationThreshold - too large",
+			uiConfig: UIConfig{
+				MaxButtonTextLength:       50,
+				ServersPerPage:            32,
+				MaxQuickSelectServers:     10,
+				MessageTimeoutMinutes:     60,
+				EnableNameOptimization:    true,
+				NameOptimizationThreshold: 1.5,
+			},
+			expectError: true,
+			errorMsg:    "name_optimization_threshold must be between 0 and 1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &Config{
+				AdminID:         123456789,
+				BotToken:        "1234567890:ABCDefGhiJklMnoPqRsTuVwXyZ",
+				ConfigPath:      "/opt/etc/xray/configs/04_outbounds.json",
+				SubscriptionURL: "https://example.com/config.txt",
+				LogLevel:        "info",
+				PingTimeout:     5,
+				UI:              tt.uiConfig,
+				Update: UpdateConfig{
+					ScriptURL:      "https://example.com/script.sh",
+					TimeoutMinutes: 10,
+					BackupConfig:   false,
+				},
+			}
+
+			err := config.Validate()
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected validation error but got none")
+					return
+				}
+
+				if tt.errorMsg != "" && !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Expected error message to contain '%s', got: %v", tt.errorMsg, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no validation error, got: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// TestConfigGetters tests the new getter methods
+func TestConfigGetters(t *testing.T) {
+	config := &Config{
+		UI: UIConfig{
+			MaxButtonTextLength:       75,
+			ServersPerPage:            25,
+			MaxQuickSelectServers:     15,
+			MessageTimeoutMinutes:     90,
+			EnableNameOptimization:    false,
+			NameOptimizationThreshold: 0.8,
+		},
+		Update: UpdateConfig{
+			ScriptURL:      "https://custom.com/script.sh",
+			TimeoutMinutes: 15,
+			BackupConfig:   true,
+		},
+	}
+
+	// Test UI getters
+	if config.GetMaxButtonTextLength() != 75 {
+		t.Errorf("Expected MaxButtonTextLength 75, got %d", config.GetMaxButtonTextLength())
+	}
+
+	if config.GetServersPerPage() != 25 {
+		t.Errorf("Expected ServersPerPage 25, got %d", config.GetServersPerPage())
+	}
+
+	if config.GetMaxQuickSelectServers() != 15 {
+		t.Errorf("Expected MaxQuickSelectServers 15, got %d", config.GetMaxQuickSelectServers())
+	}
+
+	if config.GetMessageTimeoutMinutes() != 90 {
+		t.Errorf("Expected MessageTimeoutMinutes 90, got %d", config.GetMessageTimeoutMinutes())
+	}
+
+	if config.IsNameOptimizationEnabled() {
+		t.Error("Expected IsNameOptimizationEnabled to be false")
+	}
+
+	if config.GetNameOptimizationThreshold() != 0.8 {
+		t.Errorf("Expected NameOptimizationThreshold 0.8, got %f", config.GetNameOptimizationThreshold())
+	}
+
+	// Test struct getters
+	uiConfig := config.GetUIConfig()
+	if uiConfig.MaxButtonTextLength != 75 {
+		t.Errorf("Expected UI config MaxButtonTextLength 75, got %d", uiConfig.MaxButtonTextLength)
+	}
+
+	updateConfig := config.GetUpdateConfig()
+	if updateConfig.ScriptURL != "https://custom.com/script.sh" {
+		t.Errorf("Expected Update config ScriptURL, got %s", updateConfig.ScriptURL)
 	}
 }

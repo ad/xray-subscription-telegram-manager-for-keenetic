@@ -1,4 +1,5 @@
 package server
+
 import (
 	"encoding/base64"
 	"encoding/json"
@@ -14,6 +15,13 @@ import (
 	"xray-telegram-manager/config"
 	"xray-telegram-manager/types"
 )
+
+// SubscriptionLoader interface for loading servers from subscription
+type SubscriptionLoader interface {
+	LoadFromURL() ([]types.Server, error)
+	InvalidateCache()
+}
+
 type SubscriptionLoaderImpl struct {
 	config     *config.Config
 	httpClient *http.Client
@@ -23,6 +31,7 @@ type SubscriptionLoaderImpl struct {
 	parser     *VlessParser
 	cacheFile  string
 }
+
 func NewSubscriptionLoader(cfg *config.Config) *SubscriptionLoaderImpl {
 	httpClient := &http.Client{
 		Timeout: time.Duration(cfg.PingTimeout) * time.Second,
@@ -31,9 +40,9 @@ func NewSubscriptionLoader(cfg *config.Config) *SubscriptionLoaderImpl {
 			DialContext: (&net.Dialer{
 				Timeout: 10 * time.Second,
 			}).DialContext,
-			TLSHandshakeTimeout: 10 * time.Second,
-			MaxIdleConns:        10,
-			MaxIdleConnsPerHost: 2,
+			TLSHandshakeTimeout:   10 * time.Second,
+			MaxIdleConns:          10,
+			MaxIdleConnsPerHost:   2,
 			ResponseHeaderTimeout: 15 * time.Second,
 		},
 	}
@@ -52,9 +61,9 @@ func NewSubscriptionLoaderWithCacheDir(cfg *config.Config, cacheDir string) *Sub
 			DialContext: (&net.Dialer{
 				Timeout: 10 * time.Second,
 			}).DialContext,
-			TLSHandshakeTimeout: 10 * time.Second,
-			MaxIdleConns:        10,
-			MaxIdleConnsPerHost: 2,
+			TLSHandshakeTimeout:   10 * time.Second,
+			MaxIdleConns:          10,
+			MaxIdleConnsPerHost:   2,
 			ResponseHeaderTimeout: 15 * time.Second,
 		},
 	}
