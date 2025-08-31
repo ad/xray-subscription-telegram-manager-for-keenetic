@@ -106,7 +106,7 @@ func (mm *MessageManager) SendOrEdit(ctx context.Context, userID int64, content 
 		ChatID:      activeMsg.ChatID,
 		MessageID:   activeMsg.MessageID,
 		Text:        content.Text,
-		ReplyMarkup: content.ReplyMarkup,
+		ReplyMarkup: mm.ensureValidReplyMarkup(content.ReplyMarkup),
 		ParseMode:   content.ParseMode,
 	}
 
@@ -142,6 +142,14 @@ func (mm *MessageManager) SendNew(ctx context.Context, userID int64, content Mes
 	return mm.sendNewWithRetry(opCtx, userID, content)
 }
 
+// ensureValidReplyMarkup ensures that ReplyMarkup is valid or returns an empty keyboard
+func (mm *MessageManager) ensureValidReplyMarkup(markup *models.InlineKeyboardMarkup) *models.InlineKeyboardMarkup {
+	if markup == nil {
+		return &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}}
+	}
+	return markup
+}
+
 // sendNewWithRetry sends a new message with retry logic
 func (mm *MessageManager) sendNewWithRetry(ctx context.Context, userID int64, content MessageContent) error {
 	mm.logger.Debug("Sending new message to user %d", userID)
@@ -149,7 +157,7 @@ func (mm *MessageManager) sendNewWithRetry(ctx context.Context, userID int64, co
 	sendParams := &bot.SendMessageParams{
 		ChatID:      userID,
 		Text:        content.Text,
-		ReplyMarkup: content.ReplyMarkup,
+		ReplyMarkup: mm.ensureValidReplyMarkup(content.ReplyMarkup),
 		ParseMode:   content.ParseMode,
 	}
 

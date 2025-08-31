@@ -177,8 +177,9 @@ func (tb *TelegramBot) handleList(ctx context.Context, b *bot.Bot, update *model
 		tb.logger.Warn("No servers available for /list command")
 		messageFormatter := NewMessageFormatter()
 		noServersContent := MessageContent{
-			Text: messageFormatter.FormatNoServersMessage(),
-			Type: MessageTypeServerList,
+			Text:        messageFormatter.FormatNoServersMessage(),
+			ReplyMarkup: tb.createEmptyKeyboard(),
+			Type:        MessageTypeServerList,
 		}
 		_ = tb.messageManager.SendNew(ctx, update.Message.Chat.ID, noServersContent)
 		return
@@ -361,6 +362,11 @@ func (tb *TelegramBot) createServerListKeyboard(servers []types.Server, page int
 	return &models.InlineKeyboardMarkup{InlineKeyboard: keyboard}
 }
 
+// createEmptyKeyboard creates an empty inline keyboard for messages that don't need buttons
+func (tb *TelegramBot) createEmptyKeyboard() *models.InlineKeyboardMarkup {
+	return &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}}
+}
+
 func (tb *TelegramBot) handleRefreshCallback(ctx context.Context, b *bot.Bot, chatID int64, callbackQueryID string) {
 	tb.logger.Info("Processing refresh callback for user %d", chatID)
 
@@ -371,8 +377,9 @@ func (tb *TelegramBot) handleRefreshCallback(ctx context.Context, b *bot.Bot, ch
 
 	// Show loading message using MessageManager
 	loadingContent := MessageContent{
-		Text: "🔄 Refreshing server list...\n⏳ Please wait...",
-		Type: MessageTypeServerList,
+		Text:        "🔄 Refreshing server list...\n⏳ Please wait...",
+		ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}},
+		Type:        MessageTypeServerList,
 	}
 
 	if err := tb.messageManager.SendOrEdit(ctx, chatID, loadingContent); err != nil {
@@ -390,8 +397,9 @@ func (tb *TelegramBot) handleRefreshCallback(ctx context.Context, b *bot.Bot, ch
 			"Try again in a few moments",
 		}
 		errorContent := MessageContent{
-			Text: messageFormatter.FormatErrorMessage("Failed to Refresh Servers", err.Error(), suggestions),
-			Type: MessageTypeServerList,
+			Text:        messageFormatter.FormatErrorMessage("Failed to Refresh Servers", err.Error(), suggestions),
+			ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}},
+			Type:        MessageTypeServerList,
 		}
 		_ = tb.messageManager.SendOrEdit(ctx, chatID, errorContent)
 		return
@@ -404,8 +412,9 @@ func (tb *TelegramBot) handleRefreshCallback(ctx context.Context, b *bot.Bot, ch
 		tb.logger.Warn("No servers available for refresh callback")
 		messageFormatter := NewMessageFormatter()
 		noServersContent := MessageContent{
-			Text: messageFormatter.FormatNoServersMessage(),
-			Type: MessageTypeServerList,
+			Text:        messageFormatter.FormatNoServersMessage(),
+			ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}},
+			Type:        MessageTypeServerList,
 		}
 		_ = tb.messageManager.SendOrEdit(ctx, chatID, noServersContent)
 		return
@@ -449,8 +458,9 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 		tb.logger.Warn("No servers available for ping testing")
 		messageFormatter := NewMessageFormatter()
 		noServersContent := MessageContent{
-			Text: messageFormatter.FormatNoServersMessage(),
-			Type: MessageTypePingTest,
+			Text:        messageFormatter.FormatNoServersMessage(),
+			ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}},
+			Type:        MessageTypePingTest,
 		}
 		_ = tb.messageManager.SendOrEdit(ctx, chatID, noServersContent)
 		return
@@ -460,8 +470,9 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 	messageFormatter := NewMessageFormatter()
 	initialMessage := messageFormatter.FormatPingTestProgress(0, len(servers), "Initializing...")
 	initialContent := MessageContent{
-		Text: initialMessage,
-		Type: MessageTypePingTest,
+		Text:        initialMessage,
+		ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}},
+		Type:        MessageTypePingTest,
 	}
 
 	if err := tb.messageManager.SendOrEdit(ctx, chatID, initialContent); err != nil {
@@ -473,8 +484,9 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 		updatedMessage := messageFormatter.FormatPingTestProgress(completed, total, serverName)
 
 		progressContent := MessageContent{
-			Text: updatedMessage,
-			Type: MessageTypePingTest,
+			Text:        updatedMessage,
+			ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}},
+			Type:        MessageTypePingTest,
 		}
 
 		// Use MessageManager for progress updates
@@ -1025,8 +1037,9 @@ func (tb *TelegramBot) handleStatusCallback(ctx context.Context, b *bot.Bot, cha
 
 	// Show loading state first
 	loadingContent := MessageContent{
-		Text: message + "\n\n🔄 Testing connection...",
-		Type: MessageTypeStatus,
+		Text:        message + "\n\n🔄 Testing connection...",
+		ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}},
+		Type:        MessageTypeStatus,
 	}
 
 	if err := tb.messageManager.SendOrEdit(ctx, chatID, loadingContent); err != nil {
