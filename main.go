@@ -18,6 +18,14 @@ var (
 )
 
 func main() {
+	// Handle version flag early to allow scripts to query version without starting the service
+	for _, arg := range os.Args[1:] {
+		if arg == "--version" || arg == "-v" || arg == "version" {
+			fmt.Printf("Xray Telegram Manager v%s (built %s with %s)\n", Version, BuildTime, GoVersion)
+			os.Exit(0)
+		}
+	}
+
 	fmt.Printf("Xray Telegram Manager v%s (built %s with %s)\n", Version, BuildTime, GoVersion)
 
 	// Set version info for telegram package
