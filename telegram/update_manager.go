@@ -65,7 +65,7 @@ type UpdateManagerInterface interface {
 // NewUpdateManager creates a new UpdateManager instance
 func NewUpdateManager(scriptURL string, timeout time.Duration, backupConfig bool, logger Logger) *UpdateManager {
 	if scriptURL == "" {
-		scriptURL = "https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh"
+		scriptURL = "https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/update.sh"
 	}
 	if timeout == 0 {
 		timeout = 10 * time.Minute
@@ -135,7 +135,7 @@ func (um *UpdateManager) ExecuteUpdate(ctx context.Context) error {
 	}
 
 	// Step 3: Execute update script (75% progress)
-	um.updateProgress("installing", 75, "Installing update...")
+	um.updateProgress("installing", 75, "Installing update and restarting service...")
 	if err := um.executeScript(updateCtx, scriptPath); err != nil {
 		um.updateError(err)
 		return fmt.Errorf("failed to execute update script: %w", err)
@@ -143,7 +143,7 @@ func (um *UpdateManager) ExecuteUpdate(ctx context.Context) error {
 
 	// Step 4: Verify update completion (100% progress)
 	um.updateProgress("completing", 100, "Update completed successfully")
-	um.logger.Info("Bot update completed successfully")
+	um.logger.Info("Bot update completed successfully - service should be restarted automatically")
 
 	return nil
 }
@@ -286,7 +286,7 @@ func (um *UpdateManager) executeScript(ctx context.Context, scriptPath string) e
 	// Execute the script with restricted environment
 	shell := getAvailableShell()
 	um.logger.Debug("Using shell: %s for script execution", shell)
-	cmd := exec.CommandContext(ctx, shell, scriptPath)
+	cmd := exec.CommandContext(ctx, shell, scriptPath, "--force")
 
 	// Set a clean environment with only essential variables
 	cmd.Env = []string{
