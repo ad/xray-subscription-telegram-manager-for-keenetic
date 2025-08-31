@@ -37,6 +37,14 @@ print_step() {
     echo -e "${BLUE}[STEP]${NC} $1"
 }
 
+# Function to check if running as root
+check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        print_error "This script must be run as root"
+        exit 1
+    fi
+}
+
 # Function to find binary location
 find_binary() {
     # Check primary location
