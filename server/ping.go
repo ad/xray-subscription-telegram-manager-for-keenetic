@@ -77,7 +77,7 @@ func (pt *PingTesterImpl) TestServer(server types.Server) types.PingResult {
 		_ = err
 	}
 	result.Available = true
-	result.Latency = latency.Milliseconds()
+	result.Latency = latency
 	result.Error = nil
 	return result
 }

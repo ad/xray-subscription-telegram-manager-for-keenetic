@@ -155,7 +155,7 @@ func (mf *MessageFormatter) FormatPingTestResults(results []types.PingResult, cu
 				}
 
 				// Format latency with quality indicator
-				qualityEmoji := mf.getLatencyQualityEmoji(result.Latency)
+				qualityEmoji := mf.getLatencyQualityEmoji(result.Latency.Milliseconds())
 
 				displayName := result.Server.Name
 				if len(displayName) > 20 {
@@ -163,7 +163,7 @@ func (mf *MessageFormatter) FormatPingTestResults(results []types.PingResult, cu
 				}
 
 				builder.WriteString(fmt.Sprintf("%s %s %s %dms%s\n",
-					statusIcon, displayName, qualityEmoji, result.Latency, statusText))
+					statusIcon, displayName, qualityEmoji, result.Latency.Milliseconds(), statusText))
 				count++
 			}
 		}
@@ -208,11 +208,11 @@ func (mf *MessageFormatter) FormatServerStatusMessage(server *types.Server, resu
 
 	if result != nil {
 		if result.Available {
-			qualityEmoji := mf.getLatencyQualityEmoji(result.Latency)
-			qualityText := mf.getLatencyQualityText(result.Latency)
+			qualityEmoji := mf.getLatencyQualityEmoji(result.Latency.Milliseconds())
+			qualityText := mf.getLatencyQualityText(result.Latency.Milliseconds())
 
 			builder.WriteString("└ Status: ✅ Connected\n")
-			builder.WriteString(fmt.Sprintf("└ Latency: ⚡ %dms\n", result.Latency))
+			builder.WriteString(fmt.Sprintf("└ Latency: ⚡ %dms\n", result.Latency.Milliseconds()))
 			builder.WriteString(fmt.Sprintf("└ Quality: %s %s\n", qualityEmoji, qualityText))
 		} else {
 			errorMsg := result.Error.Error()

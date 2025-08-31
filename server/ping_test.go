@@ -11,7 +11,7 @@ import (
 
 func TestNewPingTester(t *testing.T) {
 	cfg := &config.Config{
-		PingTimeout:     1,
+		PingTimeout: 1,
 	}
 
 	pt := NewPingTester(cfg)
@@ -484,8 +484,8 @@ func BenchmarkPingTesterImpl_SortByLatency(b *testing.B) {
 	for i := 0; i < 100; i++ {
 		results[i] = types.PingResult{
 			Server:    types.Server{ID: fmt.Sprintf("server%d", i)},
-			Available: i%3 != 0,       // Make some unavailable
-			Latency:   int64(100 - i), // Reverse order latency
+			Available: i%3 != 0,                                // Make some unavailable
+			Latency:   time.Duration(100-i) * time.Millisecond, // Reverse order latency
 		}
 	}
 
@@ -508,7 +508,7 @@ func TestPingTesterImpl_TestServer_WithMockServer(t *testing.T) {
 	mockServer.Start()
 
 	cfg := &config.Config{
-		PingTimeout:     1,
+		PingTimeout: 1,
 	}
 	pt := NewPingTester(cfg)
 

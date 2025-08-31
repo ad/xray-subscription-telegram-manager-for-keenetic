@@ -6,7 +6,6 @@ import (
 	"xray-telegram-manager/config"
 	"xray-telegram-manager/logger"
 	"xray-telegram-manager/types"
-	"xray-telegram-manager/xray"
 )
 
 type ServerManager struct {
@@ -15,7 +14,7 @@ type ServerManager struct {
 	currentServer      *types.Server
 	subscriptionLoader SubscriptionLoader
 	pingTester         *PingTesterImpl
-	xrayController     *xray.XrayController
+	xrayController     *XrayController
 	nameOptimizer      *ServerNameOptimizer
 	serverSorter       *ServerSorter
 	logger             *logger.Logger
@@ -32,7 +31,7 @@ func NewServerManager(cfg *config.Config) *ServerManager {
 		currentServer:      nil,
 		subscriptionLoader: NewSubscriptionLoader(cfg),
 		pingTester:         NewPingTester(cfg),
-		xrayController:     xray.NewXrayController(&configAdapter{cfg}),
+		xrayController:     NewXrayController(&configAdapter{cfg}),
 		nameOptimizer:      NewServerNameOptimizer(cfg.UI.NameOptimizationThreshold, log),
 		serverSorter:       NewServerSorter(),
 		logger:             log,
@@ -49,7 +48,7 @@ func NewServerManagerWithCacheDir(cfg *config.Config, cacheDir string) *ServerMa
 		currentServer:      nil,
 		subscriptionLoader: NewSubscriptionLoaderWithCacheDir(cfg, cacheDir),
 		pingTester:         NewPingTester(cfg),
-		xrayController:     xray.NewXrayController(&configAdapter{cfg}),
+		xrayController:     NewXrayController(&configAdapter{cfg}),
 		nameOptimizer:      NewServerNameOptimizer(cfg.UI.NameOptimizationThreshold, log),
 		serverSorter:       NewServerSorter(),
 		logger:             log,

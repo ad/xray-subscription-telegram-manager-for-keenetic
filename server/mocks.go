@@ -140,7 +140,7 @@ func (m *MockPingTester) AddMockServer(serverID string, available bool, latency 
 	}
 	result := types.PingResult{
 		Available: available,
-		Latency:   int64(latency / time.Millisecond),
+		Latency:   latency,
 	}
 	if !available {
 		result.Error = fmt.Errorf("mock server unavailable")

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 	"xray-telegram-manager/config"
-	"xray-telegram-manager/interfaces"
+	"xray-telegram-manager/logger"
 	"xray-telegram-manager/server"
 	"xray-telegram-manager/telegram"
 	"xray-telegram-manager/types"
@@ -14,9 +14,9 @@ import (
 
 type Service struct {
 	config          *config.Config
-	logger          interfaces.Logger
-	bot             interfaces.TelegramBot
-	serverMgr       interfaces.ServerManager
+	logger          *logger.Logger
+	bot             TelegramBot
+	serverMgr       *server.ServerManager
 	ctx             context.Context
 	cancel          context.CancelFunc
 	running         bool
@@ -26,7 +26,13 @@ type Service struct {
 	healthStatus    map[string]interface{}
 }
 
-func NewService(cfg *config.Config, log interfaces.Logger) (*Service, error) {
+// Local interfaces to avoid dependency on interfaces package
+type TelegramBot interface {
+	Start(ctx context.Context) error
+	Stop()
+}
+
+func NewService(cfg *config.Config, log *logger.Logger) (*Service, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}

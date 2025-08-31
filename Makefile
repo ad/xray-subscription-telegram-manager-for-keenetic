@@ -151,6 +151,12 @@ install: dev ## Install development binary to GOPATH/bin
 .PHONY: test
 test: ## Run tests
 	@echo "Running tests..."
+	@go test ./...
+
+# Run tests with verbose output
+.PHONY: test-verbose
+test-verbose: ## Run tests with verbose output
+	@echo "Running tests with verbose output..."
 	@go test -v ./...
 
 # Run tests with coverage
@@ -160,6 +166,16 @@ test-coverage: ## Run tests with coverage
 	@go test -v -coverprofile=coverage.out ./...
 	@go tool cover -html=coverage.out -o coverage.html
 	@echo "✓ Coverage report generated: coverage.html"
+
+# Run tests in watch mode (requires entr)
+.PHONY: test-watch
+test-watch: ## Run tests in watch mode (requires entr)
+	@if command -v entr >/dev/null 2>&1; then \
+		echo "Running tests in watch mode (press Ctrl+C to stop)..."; \
+		find . -name "*.go" | entr -c go test ./...; \
+	else \
+		echo "entr not found. Install with: brew install entr"; \
+	fi
 
 # Format code
 .PHONY: fmt
