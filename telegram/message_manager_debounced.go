@@ -45,14 +45,6 @@ type PendingUpdate struct {
 	timer     *time.Timer
 }
 
-// PendingUpdate represents a pending message update for debouncing
-type PendingUpdate struct {
-	UserID    int64
-	Content   MessageContent
-	UpdatedAt time.Time
-	timer     *time.Timer
-}
-
 // MessageManagerInterface defines the interface for message management
 type MessageManagerInterface interface {
 	// SendOrEdit sends a new message or edits an existing one
@@ -451,114 +443,6 @@ func (mm *MessageManager) CleanupExpiredPendingUpdates() {
 	if len(expiredUsers) > 0 {
 		mm.logger.Debug("Cleaned up %d expired pending updates", len(expiredUsers))
 	}
-}
-
-// CleanupExpiredMessagesWithContext removes expired messages with context cancellation support
-func (mm *MessageManager) CleanupExpiredMessagesWithContext(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		mm.CleanupExpiredMessages()
-		mm.CleanupExpiredPendingUpdates()
-		return nil
-	}
-}
-
-// GetActiveMessageCount returns the number of active messages (for monitoring)
-func (mm *MessageManager) GetActiveMessageCount() int {
-	mm.mutex.RLock()
-	defer mm.mutex.RUnlock()
-	return len(mm.activeMessages)
-}
-
-// GetActiveMessagesByType returns the count of active messages by type (for monitoring)
-func (mm *MessageManager) GetActiveMessagesByType() map[MessageType]int {
-	mm.mutex.RLock()
-	defer mm.mutex.RUnlock()
-
-	counts := make(map[MessageType]int)
-	for _, msg := range mm.activeMessages {
-		counts[msg.Type]++
-	}
-	return counts
-}
-
-// StartCleanupRoutine starts a background routine to clean up expired messages with enhanced monitoring
-func (mm *MessageManager) StartCleanupRoutine(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Minute) // Cleanup every 10 minutes
-	defer ticker.Stop()
-
-	mm.logger.Info("Started message cleanup routine (interval: 10 minutes, timeout: %v)", mm.messageTimeout)
-
-	for {
-		select {
-		case <-ctx.Done():
-			mm.logger.Info("Message cleanup routine stopped")
-			return
-		case <-ticker.C:
-			mm.performCleanupWithRecovery(ctx)
-		}
-	}
-}
-
-// performCleanupWithRecovery performs cleanup with panic recovery
-func (mm *MessageManager) performCleanupWithRecovery(ctx context.Context) {
-	defer func() {
-		if r := recover(); r != nil {
-			mm.logger.Error("Panic recovered in message cleanup: %v", r)
-		}
-	}()
-
-	// Create a timeout context for cleanup operation
-	cleanupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	if err := mm.CleanupExpiredMessagesWithContext(cleanupCtx); err != nil {
-		mm.logger.Warn("Cleanup operation cancelled: %v", err)
-	}
-
-	// Log statistics periodically
-	activeCount := mm.GetActiveMessageCount()
-	pendingCount := mm.GetPendingUpdateCount()
-	if activeCount > 0 || pendingCount > 0 {
-		typeStats := mm.GetActiveMessagesByType()
-		mm.logger.Debug("Active messages: %d (types: %+v), pending updates: %d", activeCount, typeStats, pendingCount)
-	}
-}
-
-// ForceCleanupUser removes active message for a specific user (for error recovery)
-func (mm *MessageManager) ForceCleanupUser(userID int64, reason string) {
-	mm.mutex.Lock()
-	defer mm.mutex.Unlock()
-
-	if msg, exists := mm.activeMessages[userID]; exists {
-		delete(mm.activeMessages, userID)
-		mm.logger.Info("Force cleaned up active message for user %d (reason: %s)", userID, reason)
-	}
-
-	// Also clean up any pending updates
-	mm.CancelPendingUpdate(userID)
-}
-
-// SetTimeouts allows configuring timeouts after creation
-func (mm *MessageManager) SetTimeouts(messageTimeout, operationTimeout time.Duration) {
-	mm.mutex.Lock()
-	defer mm.mutex.Unlock()
-
-	mm.messageTimeout = messageTimeout
-	mm.operationTimeout = operationTimeout
-	mm.logger.Info("Updated timeouts: message=%v, operation=%v", messageTimeout, operationTimeout)
-}
-
-// SetRetryConfig allows configuring retry behavior after creation
-func (mm *MessageManager) SetRetryConfig(maxRetries int, retryDelay time.Duration) {
-	mm.mutex.Lock()
-	defer mm.mutex.Unlock()
-
-	mm.maxRetries = maxRetries
-	mm.retryDelay = retryDelay
-	mm.logger.Info("Updated retry config: maxRetries=%d, retryDelay=%v", maxRetries, retryDelay)
 }
 
 // SetDebounceDelay allows configuring debounce delay after creation

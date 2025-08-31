@@ -210,7 +210,7 @@ func (s *Service) startHealthMonitoring() {
 func (s *Service) performHealthCheck() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	s.logger.Debug("Performing health check...")
+	// s.logger.Debug("Performing health check...")
 	s.lastHealthCheck = time.Now()
 	healthStatus := map[string]interface{}{
 		"timestamp": s.lastHealthCheck.Unix(),
@@ -244,7 +244,7 @@ func (s *Service) performHealthCheck() {
 	status := healthStatus["status"].(string)
 	switch status {
 	case "healthy":
-		s.logger.Debug("Health check completed: %s", status)
+		// s.logger.Debug("Health check completed: %s", status)
 	case "degraded":
 		s.logger.Warn("Health check completed: %s", status)
 	case "unhealthy":

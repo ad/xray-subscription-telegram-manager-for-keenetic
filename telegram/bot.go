@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 	"xray-telegram-manager/config"
 	"xray-telegram-manager/types"
@@ -20,6 +21,10 @@ type TelegramBot struct {
 	handlers            *CommandHandlers
 	messageManager      *MessageManager
 	buttonTextProcessor *ButtonTextProcessor
+
+	// Rate limiting for ping progress updates
+	lastPingUpdate  map[int64]time.Time
+	pingUpdateMutex sync.RWMutex
 }
 
 type Logger interface {
@@ -78,11 +83,12 @@ func NewTelegramBot(config ConfigProvider, serverMgr ServerManager, logger Logge
 	rateLimiter := NewRateLimiter(10, time.Minute)
 
 	tb := &TelegramBot{
-		bot:         b,
-		config:      config,
-		serverMgr:   serverMgr,
-		logger:      logger,
-		rateLimiter: rateLimiter,
+		bot:            b,
+		config:         config,
+		serverMgr:      serverMgr,
+		logger:         logger,
+		rateLimiter:    rateLimiter,
+		lastPingUpdate: make(map[int64]time.Time),
 	}
 
 	tb.messageManager = NewMessageManager(b, logger)
@@ -443,6 +449,23 @@ func (tb *TelegramBot) handleRefreshCallback(ctx context.Context, b *bot.Bot, ch
 	}
 }
 
+// canSendPingUpdate checks if enough time has passed since the last ping update for this user
+func (tb *TelegramBot) canSendPingUpdate(userID int64) bool {
+	tb.pingUpdateMutex.RLock()
+	lastUpdate := tb.lastPingUpdate[userID]
+	tb.pingUpdateMutex.RUnlock()
+
+	// Allow updates no more frequently than once per second
+	return time.Since(lastUpdate) >= time.Second
+}
+
+// markPingUpdateSent records the time when a ping update was sent
+func (tb *TelegramBot) markPingUpdateSent(userID int64) {
+	tb.pingUpdateMutex.Lock()
+	tb.lastPingUpdate[userID] = time.Now()
+	tb.pingUpdateMutex.Unlock()
+}
+
 func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, chatID int64, callbackQueryID string) {
 	tb.logger.Info("Processing ping test callback for user %d", chatID)
 
@@ -481,6 +504,12 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 	}
 
 	progressCallback := func(completed, total int, serverName string) {
+		// Check rate limiting - only send update if enough time has passed
+		if !tb.canSendPingUpdate(chatID) {
+			tb.logger.Debug("Skipping ping update for user %d due to rate limiting", chatID)
+			return
+		}
+
 		updatedMessage := messageFormatter.FormatPingTestProgress(completed, total, serverName)
 
 		progressContent := MessageContent{
@@ -490,7 +519,12 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 		}
 
 		// Use MessageManager for progress updates
-		_ = tb.messageManager.SendOrEdit(ctx, chatID, progressContent)
+		if err := tb.messageManager.SendOrEdit(ctx, chatID, progressContent); err != nil {
+			tb.logger.Warn("Failed to send ping progress update: %v", err)
+		} else {
+			// Mark that we sent an update
+			tb.markPingUpdateSent(chatID)
+		}
 	}
 
 	tb.logger.Debug("Starting ping test with progress updates for %d servers", len(servers))
@@ -590,6 +624,11 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 	}
 
 	_ = tb.messageManager.SendOrEdit(ctx, chatID, resultsContent)
+
+	// Clean up rate limiting tracking for this user
+	tb.pingUpdateMutex.Lock()
+	delete(tb.lastPingUpdate, chatID)
+	tb.pingUpdateMutex.Unlock()
 }
 
 func (tb *TelegramBot) handleMainMenuCallback(ctx context.Context, b *bot.Bot, chatID int64, callbackQueryID string) {

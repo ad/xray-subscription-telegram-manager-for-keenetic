@@ -50,9 +50,7 @@ func (mf *MessageFormatter) FormatWelcomeMessage(serverCount int) string {
 	return fmt.Sprintf("🚀 Xray Telegram Manager\n\n"+
 		"Welcome! I can help you manage your xray proxy servers.\n\n"+
 		"📊 Server Status\n"+
-		"└ Available servers: %d\n\n"+
-		"💡 Quick Actions\n"+
-		"Use the buttons below to get started:",
+		"└ Available servers: %d",
 		serverCount)
 }
 
