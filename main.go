@@ -8,6 +8,7 @@ import (
 	"xray-telegram-manager/config"
 	"xray-telegram-manager/logger"
 	"xray-telegram-manager/service"
+	"xray-telegram-manager/telegram"
 )
 
 var (
@@ -18,6 +19,9 @@ var (
 
 func main() {
 	fmt.Printf("Xray Telegram Manager v%s (built %s with %s)\n", Version, BuildTime, GoVersion)
+
+	// Set version info for telegram package
+	telegram.SetVersionInfo(Version, BuildTime, GoVersion)
 
 	configPath := "/opt/etc/xray-manager/config.json"
 

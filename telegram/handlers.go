@@ -323,14 +323,14 @@ func (ch *CommandHandlers) handleUpdate(ctx context.Context, b *bot.Bot, update 
 
 	// Send initial update message
 	message := "🔄 Bot Update\n\n" +
-		"⚠️ **Warning**: This will update the bot to the latest version and restart the service.\n\n" +
-		"📋 **What will happen:**\n" +
+		"⚠️ Warning: This will update the bot to the latest version and restart the service.\n\n" +
+		"📋 What will happen:\n" +
 		"• Download latest update script\n" +
 		"• Create configuration backup (if enabled)\n" +
 		"• Install updates\n" +
 		"• Restart bot service\n\n" +
-		"⏱️ **Estimated time**: 2-5 minutes\n" +
-		"🔌 **Connection**: Will be briefly interrupted\n\n" +
+		"⏱️ Estimated time: 2-5 minutes\n" +
+		"🔌 Connection: Will be briefly interrupted\n\n" +
 		"Are you sure you want to proceed?"
 
 	keyboard := &models.InlineKeyboardMarkup{
@@ -523,14 +523,14 @@ func (ch *CommandHandlers) updateProgressMessage(ctx context.Context, b *bot.Bot
 
 func (ch *CommandHandlers) sendUpdateCompleteMessage(ctx context.Context, b *bot.Bot, chatID int64, messageID int) {
 	message := "✅ Bot Update Complete\n\n" +
-		"🎉 **Success!** The bot has been updated to the latest version.\n\n" +
-		"📋 **What was done:**\n" +
+		"🎉 Success! The bot has been updated to the latest version.\n\n" +
+		"📋 What was done:\n" +
 		"• ✅ Downloaded latest update script\n" +
 		"• ✅ Created configuration backup\n" +
 		"• ✅ Installed updates\n" +
 		"• ✅ Restarted bot service\n\n" +
-		"🟢 **Status**: Bot is now running the latest version\n" +
-		"🔄 **Service**: Fully operational\n\n" +
+		"🟢 Status: Bot is now running the latest version\n" +
+		"🔄 Service: Fully operational\n\n" +
 		"💡 You can now continue using the bot normally."
 
 	keyboard := &models.InlineKeyboardMarkup{
@@ -561,13 +561,13 @@ func (ch *CommandHandlers) sendUpdateCompleteMessage(ctx context.Context, b *bot
 
 func (ch *CommandHandlers) sendUpdateErrorMessage(ctx context.Context, b *bot.Bot, chatID int64, messageID int, updateErr error) {
 	message := fmt.Sprintf("❌ Bot Update Failed\n\n"+
-		"🔴 **Error**: %s\n\n"+
-		"📋 **Possible causes:**\n"+
+		"🔴 Error: %s\n\n"+
+		"📋 Possible causes:\n"+
 		"• Network connectivity issues\n"+
 		"• Server maintenance\n"+
 		"• Insufficient permissions\n"+
 		"• Script execution failure\n\n"+
-		"💡 **Next steps:**\n"+
+		"💡 Next steps:\n"+
 		"• Check your internet connection\n"+
 		"• Try again in a few minutes\n"+
 		"• Contact support if the issue persists",
@@ -601,12 +601,12 @@ func (ch *CommandHandlers) sendUpdateErrorMessage(ctx context.Context, b *bot.Bo
 
 func (ch *CommandHandlers) sendUpdateTimeoutMessage(ctx context.Context, b *bot.Bot, chatID int64, messageID int) {
 	message := "⏰ Update Timeout\n\n" +
-		"🔴 **Timeout**: The update process took longer than expected.\n\n" +
-		"📋 **What happened:**\n" +
+		"🔴 Timeout: The update process took longer than expected.\n\n" +
+		"📋 What happened:\n" +
 		"• Update process exceeded maximum time limit\n" +
 		"• The update may still be running in the background\n" +
 		"• Bot service status is uncertain\n\n" +
-		"💡 **Next steps:**\n" +
+		"💡 Next steps:\n" +
 		"• Wait a few minutes and check status\n" +
 		"• Try testing bot functionality\n" +
 		"• Contact support if issues persist"

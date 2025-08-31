@@ -2,14 +2,42 @@ package telegram
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
+
+// Version information - will be set by build flags
+var (
+	CurrentVersion = "dev"
+	BuildTime      = "unknown"
+	GoVersion      = "unknown"
+)
+
+// GitHub API response for releases
+type GitHubRelease struct {
+	TagName     string `json:"tag_name"`
+	Name        string `json:"name"`
+	Draft       bool   `json:"draft"`
+	PreRelease  bool   `json:"prerelease"`
+	PublishedAt string `json:"published_at"`
+	Body        string `json:"body"`
+}
+
+// VersionInfo contains version comparison information
+type VersionInfo struct {
+	Current         string
+	Latest          string
+	UpdateAvailable bool
+	ReleaseNotes    string
+	PublishedAt     string
+}
 
 // getAvailableShell returns the path to an available shell, preferring sh over bash
 func getAvailableShell() string {
@@ -56,6 +84,7 @@ type UpdateProgress struct {
 type UpdateManagerInterface interface {
 	ExecuteUpdate(ctx context.Context) error
 	CheckUpdateAvailable() (bool, string, error)
+	GetVersionInfo() (*VersionInfo, error)
 	GetCurrentVersion() string
 	GetUpdateStatus() UpdateStatus
 	StartProgressMonitoring() <-chan UpdateProgress
@@ -148,17 +177,98 @@ func (um *UpdateManager) ExecuteUpdate(ctx context.Context) error {
 	return nil
 }
 
-// CheckUpdateAvailable checks if an update is available
+// CheckUpdateAvailable checks if an update is available by querying GitHub releases
 func (um *UpdateManager) CheckUpdateAvailable() (bool, string, error) {
-	// For now, we'll always return true since we don't have version checking
-	// In a real implementation, this would check against a version endpoint
-	return true, "latest", nil
+	versionInfo, err := um.GetVersionInfo()
+	if err != nil {
+		return false, "", err
+	}
+	return versionInfo.UpdateAvailable, versionInfo.Latest, nil
+}
+
+// GetVersionInfo gets detailed version information including release notes
+func (um *UpdateManager) GetVersionInfo() (*VersionInfo, error) {
+	current := um.GetCurrentVersion()
+
+	// Get latest release from GitHub
+	latest, releaseNotes, publishedAt, err := um.getLatestReleaseFromGitHub()
+	if err != nil {
+		return &VersionInfo{
+			Current:         current,
+			Latest:          "unknown",
+			UpdateAvailable: false,
+			ReleaseNotes:    "",
+			PublishedAt:     "",
+		}, err
+	}
+
+	// Compare versions
+	updateAvailable := um.compareVersions(current, latest)
+
+	return &VersionInfo{
+		Current:         current,
+		Latest:          latest,
+		UpdateAvailable: updateAvailable,
+		ReleaseNotes:    releaseNotes,
+		PublishedAt:     publishedAt,
+	}, nil
+}
+
+// getLatestReleaseFromGitHub fetches the latest release from GitHub API
+func (um *UpdateManager) getLatestReleaseFromGitHub() (string, string, string, error) {
+	// GitHub API URL for the latest release
+	url := "https://api.github.com/repos/ad/xray-subscription-telegram-manager-for-keenetic/releases/latest"
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to fetch release info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", "", "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var release GitHubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", "", "", fmt.Errorf("failed to parse release info: %w", err)
+	}
+
+	// Skip draft and pre-release versions
+	if release.Draft || release.PreRelease {
+		return "", "", "", fmt.Errorf("latest release is draft or pre-release")
+	}
+
+	// Clean up release notes (limit length)
+	releaseNotes := strings.TrimSpace(release.Body)
+	if len(releaseNotes) > 500 {
+		releaseNotes = releaseNotes[:497] + "..."
+	}
+
+	return release.TagName, releaseNotes, release.PublishedAt, nil
+}
+
+// compareVersions compares two version strings
+func (um *UpdateManager) compareVersions(current, latest string) bool {
+	// Simple version comparison
+	// If current is "dev", always consider update available
+	if current == "dev" {
+		return true
+	}
+
+	// If we can't determine, assume no update to be safe
+	if latest == "" || latest == "unknown" {
+		return false
+	}
+
+	// Simple string comparison (could be improved with semantic versioning)
+	return current != latest
 }
 
 // GetCurrentVersion returns the current version of the bot
 func (um *UpdateManager) GetCurrentVersion() string {
-	// This would typically read from a version file or build info
-	return "dev" // Placeholder
+	return CurrentVersion
 }
 
 // GetUpdateStatus returns the current update status

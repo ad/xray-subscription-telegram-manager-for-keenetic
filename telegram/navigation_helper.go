@@ -361,6 +361,24 @@ func (nh *NavigationHelper) CreateUpdateNavigationKeyboard(updateState string) *
 			{Text: "🏠 Main Menu", CallbackData: "main_menu"},
 		})
 
+	case "update_available":
+		// Update available
+		keyboard = append(keyboard, []models.InlineKeyboardButton{
+			{Text: "🔄 Start Update", CallbackData: "confirm_update"},
+		})
+		keyboard = append(keyboard, []models.InlineKeyboardButton{
+			{Text: "🏠 Main Menu", CallbackData: "main_menu"},
+		})
+
+	case "up_to_date":
+		// Already up to date
+		keyboard = append(keyboard, []models.InlineKeyboardButton{
+			{Text: "🔄 Check Again", CallbackData: "update_menu"},
+		})
+		keyboard = append(keyboard, []models.InlineKeyboardButton{
+			{Text: "🏠 Main Menu", CallbackData: "main_menu"},
+		})
+
 	default:
 		// Default update navigation
 		keyboard = append(keyboard, []models.InlineKeyboardButton{

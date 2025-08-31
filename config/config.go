@@ -101,7 +101,7 @@ func (c *Config) SetDefaults() {
 
 	// Update defaults
 	if c.Update.ScriptURL == "" {
-		c.Update.ScriptURL = "https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh"
+		c.Update.ScriptURL = "https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/update.sh"
 	}
 	if c.Update.TimeoutMinutes == 0 {
 		c.Update.TimeoutMinutes = 10
@@ -320,7 +320,7 @@ func CreateTemplate(path string) error {
 			NameOptimizationThreshold: 0.7,
 		},
 		Update: UpdateConfig{
-			ScriptURL:      "https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/quick-install.sh",
+			ScriptURL:      "https://raw.githubusercontent.com/ad/xray-subscription-telegram-manager-for-keenetic/main/scripts/update.sh",
 			TimeoutMinutes: 10,
 			BackupConfig:   false,
 		},

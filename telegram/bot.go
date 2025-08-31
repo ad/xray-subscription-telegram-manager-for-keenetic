@@ -982,19 +982,63 @@ func (tb *TelegramBot) handleUpdateMenuCallback(ctx context.Context, b *bot.Bot,
 
 	_, _ = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 		CallbackQueryID: callbackQueryID,
-		Text:            "🔄 Update options",
+		Text:            "🔄 Checking for updates...",
 	})
 
-	// Show update menu with options
-	message := "🔄 Bot Update Options\n\n" +
-		"Choose an action:\n\n" +
-		"📊 **Check Status**: View current update status\n" +
-		"🔄 **Start Update**: Begin bot update process\n" +
-		"ℹ️ **Information**: View update details\n\n" +
-		"⚠️ **Note**: Updates will briefly interrupt bot service"
+	// Get update manager from handlers
+	updateManager := tb.handlers.updateManager
 
+	// Get version information
+	versionInfo, err := updateManager.GetVersionInfo()
+	if err != nil {
+		tb.logger.Error("Failed to get version info: %v", err)
+		// Fallback to basic message
+		message := "🔄 Bot Update Options\n\n" +
+			"❌ Unable to check for updates\n" +
+			"Error: " + err.Error() + "\n\n" +
+			"You can still try to update manually."
+
+		navigationHelper := NewNavigationHelper()
+		keyboard := navigationHelper.CreateUpdateNavigationKeyboard("status")
+
+		updateMenuContent := MessageContent{
+			Text:        message,
+			ReplyMarkup: keyboard,
+			Type:        MessageTypeMenu,
+		}
+
+		_ = tb.messageManager.SendOrEdit(ctx, chatID, updateMenuContent)
+		return
+	}
+
+	// Build version message
+	message := "🔄 Bot Update Information\n\n"
+	message += fmt.Sprintf("📦 Current Version: %s\n", versionInfo.Current)
+	message += fmt.Sprintf("🆕 Latest Version: %s\n\n", versionInfo.Latest)
+
+	if versionInfo.UpdateAvailable {
+		message += "✅ Update Available!\n\n"
+		if versionInfo.ReleaseNotes != "" {
+			message += "📝 Release Notes:\n"
+			message += versionInfo.ReleaseNotes + "\n\n"
+		}
+		message += "⚠️ Note: Updates will briefly interrupt bot service"
+	} else {
+		message += "✅ You are running the latest version!\n\n"
+		message += "No update is currently available."
+	}
+
+	// Create keyboard based on update availability
 	navigationHelper := NewNavigationHelper()
-	keyboard := navigationHelper.CreateUpdateNavigationKeyboard("status")
+	var keyboard *models.InlineKeyboardMarkup
+
+	if versionInfo.UpdateAvailable {
+		// Show update options when update is available
+		keyboard = navigationHelper.CreateUpdateNavigationKeyboard("update_available")
+	} else {
+		// Show status-only options when up to date
+		keyboard = navigationHelper.CreateUpdateNavigationKeyboard("up_to_date")
+	}
 
 	updateMenuContent := MessageContent{
 		Text:        message,
