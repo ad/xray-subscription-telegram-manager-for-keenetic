@@ -45,6 +45,110 @@ check_root() {
     fi
 }
 
+# Function: detect available download command
+get_download_cmd() {
+    if command -v curl >/dev/null 2>&1; then
+        echo "curl -fsSL -o"
+        return 0
+    fi
+    if command -v wget >/dev/null 2>&1; then
+        # Prefer no-check-certificate if supported
+        if wget --help 2>&1 | grep -q "check-certificate"; then
+            echo "wget --no-check-certificate -O"
+        else
+            echo "wget -O"
+        fi
+        return 0
+    fi
+    return 1
+}
+
+# Function: detect architecture string for releases
+detect_arch() {
+    arch="mips-softfloat"
+    uname_m=$(uname -m 2>/dev/null || echo "")
+    if [ "$uname_m" = "mipsel" ]; then
+        arch="mipsle-softfloat"
+    elif [ "$uname_m" = "mips" ]; then
+        if grep -q "MT7621" /proc/cpuinfo 2>/dev/null; then
+            arch="mipsle-softfloat"
+        else
+            arch="mips-softfloat"
+        fi
+    fi
+    echo "$arch"
+}
+
+# Function: get latest release tag via GitHub API
+get_latest_version() {
+    api="https://api.github.com/repos/ad/xray-subscription-telegram-manager-for-keenetic/releases/latest"
+    if command -v curl >/dev/null 2>&1; then
+        info=$(curl -fsSL "$api" 2>/dev/null)
+    elif command -v wget >/dev/null 2>&1; then
+        info=$(wget --no-check-certificate -qO- "$api" 2>/dev/null || wget -qO- "$api" 2>/dev/null)
+    fi
+    if [ -z "$info" ]; then
+        echo ""
+        return 1
+    fi
+    # extract tag_name
+    echo "$info" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
+}
+
+# Function: download latest release binary into a temp file
+download_latest_binary() {
+    arch=$(detect_arch)
+    version=$(get_latest_version)
+    if [ -z "$version" ]; then
+        print_error "Failed to get latest release info"
+        return 1
+    fi
+    dlcmd=$(get_download_cmd) || {
+        print_error "Neither curl nor wget found"
+        return 1
+    }
+    tmpdir=${TMPDIR:-/tmp}
+    tmpbin="$tmpdir/xray-telegram-manager.$$"
+
+    # Try archive first
+    archive_url="https://github.com/ad/xray-subscription-telegram-manager-for-keenetic/releases/latest/download/xray-telegram-manager-$arch.tar.gz"
+    archive_file="$tmpdir/xray-telegram-manager-$arch.tar.gz"
+    if sh -c "$dlcmd '$archive_file' '$archive_url'" 2>/dev/null; then
+        if tar -xzf "$archive_file" -C "$tmpdir" 2>/dev/null; then
+            if [ -f "$tmpdir/xray-telegram-manager" ]; then
+                mv "$tmpdir/xray-telegram-manager" "$tmpbin"
+                chmod 755 "$tmpbin"
+                rm -f "$archive_file"
+                echo "$tmpbin"
+                return 0
+            fi
+        fi
+        rm -f "$archive_file" 2>/dev/null || true
+    fi
+
+    # Try direct binary for detected arch
+    bin_url="https://github.com/ad/xray-subscription-telegram-manager-for-keenetic/releases/latest/download/xray-telegram-manager-$version-$arch"
+    if sh -c "$dlcmd '$tmpbin' '$bin_url'" 2>/dev/null; then
+        chmod 755 "$tmpbin"
+        echo "$tmpbin"
+        return 0
+    fi
+
+    # Try alternative arches
+    for alt in mips-hardfloat mipsle-softfloat mipsle-hardfloat mips-softfloat; do
+        [ "$alt" = "$arch" ] && continue
+        alt_url="https://github.com/ad/xray-subscription-telegram-manager-for-keenetic/releases/latest/download/xray-telegram-manager-$version-$alt"
+        if sh -c "$dlcmd '$tmpbin' '$alt_url'" 2>/dev/null; then
+            chmod 755 "$tmpbin"
+            echo "$tmpbin"
+            return 0
+        fi
+    done
+
+    print_error "Failed to download release binary"
+    return 1
+}
+
 # Function to find binary location
 find_binary() {
     # Check primary location
@@ -157,9 +261,12 @@ update_binary() {
     elif [ -f "./${BINARY_NAME}" ]; then
         binary_path="./${BINARY_NAME}"
     else
-        print_error "Binary not found. Please build the project first."
-        print_info "Run: make mips"
-        exit 1
+        print_warn "Local build artifacts not found. Trying to download latest release..."
+        binary_path=$(download_latest_binary) || {
+            print_error "Binary not found and download failed."
+            print_info "Run: make mips"
+            exit 1
+        }
     fi
     
     # Find current binary location
