@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 	"xray-telegram-manager/types"
 )
 
@@ -21,6 +22,27 @@ func NewMessageFormatter() *MessageFormatter {
 		maxServerNameLength: 30,
 		maxErrorLength:      100,
 	}
+}
+
+// safeTruncateUTF8 safely truncates a UTF-8 string to a maximum length without breaking UTF-8 sequences
+func (mf *MessageFormatter) safeTruncateUTF8(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+
+	// Ensure UTF-8 validity first
+	if !utf8.ValidString(s) {
+		s = strings.ToValidUTF8(s, "")
+	}
+
+	// Find safe truncation point - only truncate at character boundaries
+	for i := maxLen; i > 0; i-- {
+		if utf8.ValidString(s[:i]) {
+			return s[:i] + "..."
+		}
+	}
+
+	return "..."
 }
 
 // FormatWelcomeMessage creates a consistently formatted welcome message
@@ -71,11 +93,8 @@ func (mf *MessageFormatter) FormatServerListMessage(servers []types.Server, curr
 			statusText = ""
 		}
 
-		// Truncate server name if too long
-		displayName := server.Name
-		if len(displayName) > mf.maxServerNameLength {
-			displayName = displayName[:mf.maxServerNameLength-3] + "..."
-		}
+		// Safely truncate server name if too long
+		displayName := mf.safeTruncateUTF8(server.Name, mf.maxServerNameLength)
 
 		builder.WriteString(fmt.Sprintf("%s %s%s\n", statusIcon, displayName, statusText))
 	}
@@ -88,11 +107,8 @@ func (mf *MessageFormatter) FormatPingTestProgress(completed, total int, current
 	percentage := (completed * 100) / total
 	progressBar := mf.createProgressBar(percentage, 20)
 
-	// Truncate current server name
-	displayName := currentServer
-	if len(displayName) > 25 {
-		displayName = displayName[:22] + "..."
-	}
+	// Safely truncate current server name
+	displayName := mf.safeTruncateUTF8(currentServer, 25)
 
 	return fmt.Sprintf("🏓 Ping Test in Progress\n\n"+
 		"📊 Progress Overview\n"+

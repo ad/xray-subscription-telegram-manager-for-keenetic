@@ -1,4 +1,5 @@
 package server
+
 import (
 	"fmt"
 	"net"
@@ -6,8 +7,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 	"xray-telegram-manager/types"
 )
+
 type VlessParser struct{}
 type VlessConfig struct {
 	UUID        string
@@ -22,6 +25,7 @@ type VlessConfig struct {
 	Flow        string
 	Name        string
 }
+
 func NewVlessParser() *VlessParser {
 	return &VlessParser{}
 }
@@ -219,8 +223,21 @@ func (vp *VlessParser) sanitizeString(s string, maxLen int) string {
 	s = strings.ReplaceAll(s, "&", "")
 	s = strings.ReplaceAll(s, "|", "")
 	s = strings.TrimSpace(s)
-	if len(s) > maxLen {
-		s = s[:maxLen]
+
+	// Ensure UTF-8 validity
+	if !utf8.ValidString(s) {
+		s = strings.ToValidUTF8(s, "")
 	}
+
+	// Safe UTF-8 truncation - only truncate at character boundaries
+	if len(s) > maxLen {
+		for i := maxLen; i > 0; i-- {
+			if utf8.ValidString(s[:i]) {
+				s = s[:i]
+				break
+			}
+		}
+	}
+
 	return s
 }

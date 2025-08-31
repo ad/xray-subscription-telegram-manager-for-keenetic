@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -85,6 +86,12 @@ func NewMessageManager(b BotInterface, logger Logger) *MessageManager {
 
 // SendOrEdit sends a new message or edits an existing one with timeout and retry handling
 func (mm *MessageManager) SendOrEdit(ctx context.Context, userID int64, content MessageContent) error {
+	// Ensure content text is valid UTF-8
+	if !utf8.ValidString(content.Text) {
+		content.Text = strings.ToValidUTF8(content.Text, "")
+		mm.logger.Warn("Fixed invalid UTF-8 in message content for user %d", userID)
+	}
+
 	// Create a context with timeout for the operation
 	opCtx, cancel := context.WithTimeout(ctx, mm.operationTimeout)
 	defer cancel()
