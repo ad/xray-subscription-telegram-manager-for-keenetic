@@ -39,9 +39,9 @@ type VersionInfo struct {
 	PublishedAt     string
 }
 
-// getAvailableShell returns the path to an available shell, preferring sh over bash
+// getAvailableShell returns the path to an available shell, preferring bash over sh
 func getAvailableShell() string {
-	shells := []string{"/bin/sh", "/bin/bash", "/usr/bin/sh", "/usr/bin/bash"}
+	shells := []string{"/bin/bash", "/usr/bin/bash", "/bin/sh", "/usr/bin/sh"}
 	for _, shell := range shells {
 		if _, err := os.Stat(shell); err == nil {
 			return shell

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Update script for xray-telegram-manager
 
@@ -13,6 +13,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 INSTALL_DIR="/opt/etc/xray-manager"
+ALT_INSTALL_DIR="/opt/bin"
 CONFIG_FILE="$INSTALL_DIR/config.json"
 SERVICE_FILE="/opt/etc/init.d/S99xray-telegram-manager"
 SYSTEMD_SERVICE_FILE="/etc/systemd/system/xray-telegram-manager.service"
@@ -36,12 +37,27 @@ print_step() {
     echo -e "${BLUE}[STEP]${NC} $1"
 }
 
-# Function to check if running as root
-check_root() {
-    if [ "$EUID" -ne 0 ]; then
-        print_error "This script must be run as root"
-        exit 1
+# Function to find binary location
+find_binary() {
+    # Check primary location
+    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+        echo "$INSTALL_DIR/$BINARY_NAME"
+        return 0
     fi
+    
+    # Check alternative location
+    if [ -f "$ALT_INSTALL_DIR/$BINARY_NAME" ]; then
+        echo "$ALT_INSTALL_DIR/$BINARY_NAME"
+        return 0
+    fi
+    
+    # Check if it's in PATH
+    if command -v "$BINARY_NAME" >/dev/null 2>&1; then
+        command -v "$BINARY_NAME"
+        return 0
+    fi
+    
+    return 1
 }
 
 # Function to check if systemd is available
@@ -103,8 +119,9 @@ create_backup() {
     
     mkdir -p "$BACKUP_DIR"
     
-    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
-        cp "$INSTALL_DIR/$BINARY_NAME" "${backup_file}_binary"
+    local binary_path=$(find_binary)
+    if [ -n "$binary_path" ] && [ -f "$binary_path" ]; then
+        cp "$binary_path" "${backup_file}_binary"
         print_info "✓ Binary backed up: ${backup_file}_binary"
     fi
     
@@ -137,11 +154,18 @@ update_binary() {
         exit 1
     fi
     
-    # Copy new binary
-    cp "$binary_path" "$INSTALL_DIR/$BINARY_NAME"
-    chmod 755 "$INSTALL_DIR/$BINARY_NAME"
+    # Find current binary location
+    local current_binary=$(find_binary)
+    if [ -z "$current_binary" ]; then
+        # Fallback to primary location
+        current_binary="$INSTALL_DIR/$BINARY_NAME"
+    fi
     
-    print_info "✓ Binary updated: $INSTALL_DIR/$BINARY_NAME"
+    # Copy new binary
+    cp "$binary_path" "$current_binary"
+    chmod 755 "$current_binary"
+    
+    print_info "✓ Binary updated: $current_binary"
 }
 
 # Function to update service files
@@ -168,9 +192,10 @@ update_service() {
 
 # Function to check version
 check_version() {
-    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+    local binary_path=$(find_binary)
+    if [ -n "$binary_path" ] && [ -f "$binary_path" ]; then
         print_info "Current version information:"
-        "$INSTALL_DIR/$BINARY_NAME" --version 2>/dev/null || print_warn "Version information not available"
+        "$binary_path" --version 2>/dev/null || print_warn "Version information not available"
     fi
 }
 
@@ -198,9 +223,17 @@ rollback() {
     local latest_backup=$(ls -t "$BACKUP_DIR"/backup_*_binary 2>/dev/null | head -n 1)
     
     if [ -n "$latest_backup" ] && [ -f "$latest_backup" ]; then
-        cp "$latest_backup" "$INSTALL_DIR/$BINARY_NAME"
-        chmod 755 "$INSTALL_DIR/$BINARY_NAME"
-        print_info "✓ Rolled back to previous version"
+        local binary_path=$(find_binary)
+        if [ -n "$binary_path" ]; then
+            cp "$latest_backup" "$binary_path"
+            chmod 755 "$binary_path"
+            print_info "✓ Rolled back to previous version"
+        else
+            # Fallback to primary location
+            cp "$latest_backup" "$INSTALL_DIR/$BINARY_NAME"
+            chmod 755 "$INSTALL_DIR/$BINARY_NAME"
+            print_info "✓ Rolled back to previous version (to $INSTALL_DIR)"
+        fi
         
         # Restart service
         if is_service_running; then
@@ -221,7 +254,7 @@ main() {
     local was_running=false
     
     # Parse arguments
-    while [[ $# -gt 0 ]]; do
+    while [ $# -gt 0 ]; do
         case $1 in
             -h|--help)
                 show_usage
@@ -266,7 +299,8 @@ main() {
     fi
     
     # Check if installed
-    if [ ! -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+    local binary_path=$(find_binary)
+    if [ -z "$binary_path" ] || [ ! -f "$binary_path" ]; then
         print_error "xray-telegram-manager is not installed"
         print_info "Please run the installation script first"
         exit 1
@@ -280,12 +314,17 @@ main() {
     if [ "$force" = false ]; then
         echo ""
         print_warn "This will update xray-telegram-manager"
-        read -p "Are you sure you want to continue? [y/N]: " -n 1 -r
+        printf "Are you sure you want to continue? [y/N]: "
+        read -r reply
         echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_info "Update cancelled"
-            exit 0
-        fi
+        case $reply in
+            [Yy]|[Yy][Ee][Ss])
+                ;;
+            *)
+                print_info "Update cancelled"
+                exit 0
+                ;;
+        esac
     fi
     
     print_step "Starting update..."

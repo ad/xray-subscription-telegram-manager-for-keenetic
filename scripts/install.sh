@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Installation script for xray-telegram-manager
 # Supports Keenetic routers and other OpenWrt-based systems
@@ -14,6 +14,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 INSTALL_DIR="/opt/etc/xray-manager"
+ALT_INSTALL_DIR="/opt/bin"
 CONFIG_FILE="$INSTALL_DIR/config.json"
 SERVICE_FILE="/opt/etc/init.d/S99xray-telegram-manager"
 SYSTEMD_SERVICE_FILE="/etc/systemd/system/xray-telegram-manager.service"
@@ -40,10 +41,33 @@ print_step() {
 
 # Function to check if running as root
 check_root() {
-    if [ "$EUID" -ne 0 ]; then
+    if [ "$(id -u)" -ne 0 ]; then
         print_error "This script must be run as root"
         exit 1
     fi
+}
+
+# Function to find binary location
+find_binary() {
+    # Check primary location
+    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+        echo "$INSTALL_DIR/$BINARY_NAME"
+        return 0
+    fi
+    
+    # Check alternative location
+    if [ -f "$ALT_INSTALL_DIR/$BINARY_NAME" ]; then
+        echo "$ALT_INSTALL_DIR/$BINARY_NAME"
+        return 0
+    fi
+    
+    # Check if it's in PATH
+    if command -v "$BINARY_NAME" >/dev/null 2>&1; then
+        command -v "$BINARY_NAME"
+        return 0
+    fi
+    
+    return 1
 }
 
 # Function to detect system type
@@ -276,8 +300,9 @@ uninstall() {
     fi
     
     # Remove files (but keep config and logs)
-    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
-        rm -f "$INSTALL_DIR/$BINARY_NAME"
+    local binary_path=$(find_binary)
+    if [ -n "$binary_path" ] && [ -f "$binary_path" ]; then
+        rm -f "$binary_path"
         print_info "✓ Binary removed"
     fi
     
@@ -294,7 +319,7 @@ main() {
     local uninstall_mode=false
     
     # Parse arguments
-    while [[ $# -gt 0 ]]; do
+    while [ $# -gt 0 ]; do
         case $1 in
             -h|--help)
                 show_usage
@@ -338,7 +363,8 @@ main() {
     print_info "Detected system: $system_type"
     
     # Check if already installed
-    if [ -f "$INSTALL_DIR/$BINARY_NAME" ] && [ "$force" = false ]; then
+    local binary_path=$(find_binary)
+    if [ -n "$binary_path" ] && [ -f "$binary_path" ] && [ "$force" = false ]; then
         print_warn "xray-telegram-manager is already installed"
         print_info "Use --force to reinstall or --uninstall to remove"
         exit 1

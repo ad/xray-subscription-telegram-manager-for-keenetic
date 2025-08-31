@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Build script for xray-telegram-manager
 # Supports cross-compilation for MIPS architecture (Keenetic routers)
@@ -99,7 +99,7 @@ CLEAN=false
 COMPRESS=true
 TARGET="mips"
 
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
     case $1 in
         -h|--help)
             show_usage
@@ -189,9 +189,14 @@ esac
 if [ "$COMPRESS" = true ] && command -v upx >/dev/null 2>&1; then
     print_info "Compressing binaries with UPX..."
     for binary in "$OUTPUT_DIR"/*; do
-        if [ -f "$binary" ] && [ -x "$binary" ] && [[ "$binary" != *.txt ]]; then
-            print_info "Compressing $(basename "$binary")..."
-            upx --best --lzma "$binary" 2>/dev/null || print_warn "Failed to compress $(basename "$binary")"
+        if [ -f "$binary" ] && [ -x "$binary" ]; then
+            case $binary in
+                *.txt) ;;  # Skip checksums file
+                *)
+                    print_info "Compressing $(basename "$binary")..."
+                    upx --best --lzma "$binary" 2>/dev/null || print_warn "Failed to compress $(basename "$binary")"
+                    ;;
+            esac
         fi
     done
 else

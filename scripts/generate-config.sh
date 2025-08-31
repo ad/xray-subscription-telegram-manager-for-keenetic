@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Configuration template generator for xray-telegram-manager
 
@@ -125,33 +125,44 @@ interactive_config() {
     
     # Get admin ID
     while true; do
-        read -p "Enter your Telegram admin ID: " admin_id
-        if [[ "$admin_id" =~ ^[0-9]+$ ]]; then
-            break
-        else
-            print_error "Please enter a valid numeric ID"
-        fi
+        printf "Enter your Telegram admin ID: "
+        read -r admin_id
+        case $admin_id in
+            ''|*[!0-9]*)
+                print_error "Please enter a valid numeric ID"
+                ;;
+            *)
+                break
+                ;;
+        esac
     done
     
     # Get bot token
     while true; do
-        read -p "Enter your Telegram bot token: " bot_token
-        if [[ "$bot_token" =~ ^[0-9]+:[a-zA-Z0-9_-]+$ ]]; then
-            break
-        else
-            print_error "Please enter a valid bot token (format: 123456789:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)"
-        fi
+        printf "Enter your Telegram bot token: "
+        read -r bot_token
+        case $bot_token in
+            [0-9]*:[a-zA-Z0-9_-]*)
+                break
+                ;;
+            *)
+                print_error "Please enter a valid bot token (format: 123456789:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)"
+                ;;
+        esac
     done
     
     # Get subscription URL
-    read -p "Enter your subscription URL: " subscription_url
+    printf "Enter your subscription URL: "
+    read -r subscription_url
     
     # Get xray config path
-    read -p "Enter xray config path [/opt/etc/xray/configs/04_outbounds.json]: " config_path
+    printf "Enter xray config path [/opt/etc/xray/configs/04_outbounds.json]: "
+    read -r config_path
     config_path=${config_path:-"/opt/etc/xray/configs/04_outbounds.json"}
     
     # Get restart command
-    read -p "Enter xray restart command [/opt/etc/init.d/S24xray restart]: " restart_command
+    printf "Enter xray restart command [/opt/etc/init.d/S24xray restart]: "
+    read -r restart_command
     restart_command=${restart_command:-"/opt/etc/init.d/S24xray restart"}
     
     # Get log level
@@ -160,7 +171,8 @@ interactive_config() {
     echo "2) info (default)"
     echo "3) warn"
     echo "4) error"
-    read -p "Choice [2]: " log_choice
+    printf "Choice [2]: "
+    read -r log_choice
     log_choice=${log_choice:-2}
     
     case $log_choice in
@@ -172,15 +184,18 @@ interactive_config() {
     esac
     
     # Get cache duration
-    read -p "Enter cache duration in seconds [3600]: " cache_duration
+    printf "Enter cache duration in seconds [3600]: "
+    read -r cache_duration
     cache_duration=${cache_duration:-3600}
     
     # Get health check interval
-    read -p "Enter health check interval in seconds [300]: " health_check_interval
+    printf "Enter health check interval in seconds [300]: "
+    read -r health_check_interval
     health_check_interval=${health_check_interval:-300}
     
     # Get ping timeout
-    read -p "Enter ping timeout in seconds [5]: " ping_timeout
+    printf "Enter ping timeout in seconds [5]: "
+    read -r ping_timeout
     ping_timeout=${ping_timeout:-5}
     
     # Generate configuration
@@ -206,7 +221,7 @@ main() {
     local config_type="template"
     
     # Parse arguments
-    while [[ $# -gt 0 ]]; do
+    while [ $# -gt 0 ]; do
         case $1 in
             -h|--help)
                 show_usage
@@ -243,12 +258,17 @@ main() {
     # Check if output file exists
     if [ -f "$output_file" ]; then
         print_warn "Configuration file already exists: $output_file"
-        read -p "Do you want to overwrite it? [y/N]: " -n 1 -r
+        printf "Do you want to overwrite it? [y/N]: "
+        read -r reply
         echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_info "Configuration generation cancelled"
-            exit 0
-        fi
+        case $reply in
+            [Yy]|[Yy][Ee][Ss])
+                ;;
+            *)
+                print_info "Configuration generation cancelled"
+                exit 0
+                ;;
+        esac
     fi
     
     print_step "Generating configuration..."

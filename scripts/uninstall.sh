@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Uninstallation script for xray-telegram-manager
 
@@ -13,6 +13,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 INSTALL_DIR="/opt/etc/xray-manager"
+ALT_INSTALL_DIR="/opt/bin"
 SERVICE_FILE="/opt/etc/init.d/S99xray-telegram-manager"
 SYSTEMD_SERVICE_FILE="/etc/systemd/system/xray-telegram-manager.service"
 BINARY_NAME="xray-telegram-manager"
@@ -36,10 +37,33 @@ print_step() {
 
 # Function to check if running as root
 check_root() {
-    if [ "$EUID" -ne 0 ]; then
+    if [ "$(id -u)" -ne 0 ]; then
         print_error "This script must be run as root"
         exit 1
     fi
+}
+
+# Function to find binary location
+find_binary() {
+    # Check primary location
+    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+        echo "$INSTALL_DIR/$BINARY_NAME"
+        return 0
+    fi
+    
+    # Check alternative location
+    if [ -f "$ALT_INSTALL_DIR/$BINARY_NAME" ]; then
+        echo "$ALT_INSTALL_DIR/$BINARY_NAME"
+        return 0
+    fi
+    
+    # Check if it's in PATH
+    if command -v "$BINARY_NAME" >/dev/null 2>&1; then
+        command -v "$BINARY_NAME"
+        return 0
+    fi
+    
+    return 1
 }
 
 # Function to check if systemd is available
@@ -97,28 +121,33 @@ remove_files() {
     pkill -f "$BINARY_NAME" 2>/dev/null || true
     sleep 2
     
+    # Remove binary from found location
+    local binary_path=$(find_binary)
+    if [ -n "$binary_path" ] && [ -f "$binary_path" ]; then
+        rm -f "$binary_path"
+        print_info "✓ Binary removed from $binary_path"
+    fi
+    
     if [ -d "$INSTALL_DIR" ]; then
-        # Remove binary
-        if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
-            rm -f "$INSTALL_DIR/$BINARY_NAME"
-            print_info "✓ Binary removed"
-        fi
-        
         # Ask about configuration and logs
         echo ""
         print_warn "The following directories contain configuration and logs:"
         print_warn "  $INSTALL_DIR"
         echo ""
-        read -p "Do you want to remove all data including config and logs? [y/N]: " -n 1 -r
+        printf "Do you want to remove all data including config and logs? [y/N]: "
+        read -r reply
         echo ""
         
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            rm -rf "$INSTALL_DIR"
-            print_info "✓ All data removed"
-        else
-            print_info "Configuration and logs preserved in: $INSTALL_DIR"
-            print_info "To remove manually: rm -rf $INSTALL_DIR"
-        fi
+        case $reply in
+            [Yy]|[Yy][Ee][Ss])
+                rm -rf "$INSTALL_DIR"
+                print_info "✓ All data removed"
+                ;;
+            *)
+                print_info "Configuration and logs preserved in: $INSTALL_DIR"
+                print_info "To remove manually: rm -rf $INSTALL_DIR"
+                ;;
+        esac
     else
         print_info "Installation directory not found, skipping"
     fi
@@ -145,7 +174,7 @@ main() {
     local keep_data=false
     
     # Parse arguments
-    while [[ $# -gt 0 ]]; do
+    while [ $# -gt 0 ]; do
         case $1 in
             -h|--help)
                 show_usage
@@ -174,12 +203,17 @@ main() {
     if [ "$force" = false ]; then
         echo ""
         print_warn "This will uninstall xray-telegram-manager from your system"
-        read -p "Are you sure you want to continue? [y/N]: " -n 1 -r
+        printf "Are you sure you want to continue? [y/N]: "
+        read -r reply
         echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_info "Uninstallation cancelled"
-            exit 0
-        fi
+        case $reply in
+            [Yy]|[Yy][Ee][Ss])
+                ;;
+            *)
+                print_info "Uninstallation cancelled"
+                exit 0
+                ;;
+        esac
     fi
     
     print_step "Starting uninstallation..."
@@ -194,8 +228,9 @@ main() {
     # Remove files
     if [ "$keep_data" = true ]; then
         print_step "Removing binary only..."
-        if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
-            rm -f "$INSTALL_DIR/$BINARY_NAME"
+        local binary_path=$(find_binary)
+        if [ -n "$binary_path" ] && [ -f "$binary_path" ]; then
+            rm -f "$binary_path"
             print_info "✓ Binary removed"
         fi
         print_info "Configuration and logs preserved in: $INSTALL_DIR"

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Comprehensive deployment script for xray-telegram-manager
 # Handles building, packaging, and deployment to Keenetic routers
@@ -292,7 +292,7 @@ main() {
     local clean=false
     
     # Parse arguments
-    while [[ $# -gt 0 ]]; do
+    while [ $# -gt 0 ]; do
         case $1 in
             -h|--help)
                 show_usage
