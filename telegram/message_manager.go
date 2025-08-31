@@ -209,8 +209,13 @@ func (mm *MessageManager) editMessageWithRetry(ctx context.Context, params *bot.
 		}
 
 		_, err = mm.bot.EditMessageText(ctx, params)
-		if err == nil {
-			return nil // Success
+		// If Telegram returns "message is not modified", treat it as success
+		if err != nil {
+			es := strings.ToLower(err.Error())
+			if strings.Contains(es, "message is not modified") {
+				mm.logger.Debug("Edit skipped: message %d content is identical; treating as success", params.MessageID)
+				return nil
+			}
 		}
 
 		mm.logger.Debug("Attempt %d failed to edit message %d: %v", attempt+1, params.MessageID, err)

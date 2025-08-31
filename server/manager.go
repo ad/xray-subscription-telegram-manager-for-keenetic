@@ -389,11 +389,14 @@ func (sm *ServerManager) serverMatchesOutbound(server types.Server, outbound typ
 		strongMatch = strongMatch && sniMatch && pbkMatch && sidMatch && fpMatch
 	}
 
-	// Fallback: if address differs (e.g., IP vs domain), rely on security params (SNI/PBK/SID/FP) and UUID
+	// Fallback: if address differs (e.g., IP vs domain), rely on strong identity params and UUID
 	fallbackMatch := uuidMatch && secMatch && sniMatch
 	if obSecurity == "reality" {
-		// require PBK too for reality
-		fallbackMatch = fallbackMatch && pbkMatch
+		// For REALITY consider shortId and publicKey as key identifiers; fingerprint if provided
+		fallbackMatch = fallbackMatch && pbkMatch && sidMatch
+		if obFP != "" && svFP != "" {
+			fallbackMatch = fallbackMatch && fpMatch
+		}
 	}
 
 	return strongMatch || fallbackMatch

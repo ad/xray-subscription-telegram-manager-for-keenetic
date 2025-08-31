@@ -466,9 +466,14 @@ main() {
     # Update service files
     update_service
     
-    # Start service if it was running and not disabled
-    if [ "$was_running" = true ] && [ "$no_restart" = false ]; then
-        start_service
+    # Start or restart service unless explicitly disabled
+    if [ "$no_restart" = false ]; then
+        if [ "$was_running" = true ]; then
+            start_service
+        else
+            # If not previously running, still try to start when invoked by updater
+            start_service
+        fi
         
         # Wait a moment and check if service started successfully
         sleep 3
