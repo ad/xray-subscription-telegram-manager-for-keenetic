@@ -177,16 +177,6 @@ func (mf *MessageFormatter) FormatPingTestResults(results []types.PingResult, cu
 			"└ %d servers are currently unreachable\n\n", unavailableCount))
 	}
 
-	// Recommendations
-	builder.WriteString("💡 Recommendations\n")
-	if availableCount > 0 {
-		builder.WriteString("└ Select a fast server from the quick-select buttons\n")
-		builder.WriteString("└ Servers with 🟢 quality are recommended\n")
-	} else {
-		builder.WriteString("└ Check your internet connection\n")
-		builder.WriteString("└ Try refreshing the server list\n")
-	}
-
 	return builder.String()
 }
 

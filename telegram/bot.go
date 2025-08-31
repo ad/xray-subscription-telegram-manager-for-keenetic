@@ -565,7 +565,7 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 			if result.Server.ID == currentServerID {
 				status = "✅"
 			} else {
-				status = fmt.Sprintf("%dms", result.Latency)
+				status = fmt.Sprintf("%dms", result.Latency.Milliseconds())
 			}
 
 			// Create button text with proper formatting
