@@ -11,6 +11,18 @@ import (
 	"time"
 )
 
+// getAvailableShell returns the path to an available shell, preferring sh over bash
+func getAvailableShell() string {
+	shells := []string{"/bin/sh", "/bin/bash", "/usr/bin/sh", "/usr/bin/bash"}
+	for _, shell := range shells {
+		if _, err := os.Stat(shell); err == nil {
+			return shell
+		}
+	}
+	// Fallback to sh if nothing found
+	return "/bin/sh"
+}
+
 // UpdateManager handles bot update operations
 type UpdateManager struct {
 	scriptURL    string
@@ -265,14 +277,22 @@ func (um *UpdateManager) executeScript(ctx context.Context, scriptPath string) e
 		return fmt.Errorf("invalid script path: %s", scriptPath)
 	}
 
+	// Ensure the script is executable
+	if err := os.Chmod(scriptPath, 0755); err != nil {
+		um.logger.Warn("Failed to set execute permissions on script: %v", err)
+		// Continue anyway, as the shell might still be able to execute it
+	}
+
 	// Execute the script with restricted environment
-	cmd := exec.CommandContext(ctx, "/bin/bash", scriptPath)
+	shell := getAvailableShell()
+	um.logger.Debug("Using shell: %s for script execution", shell)
+	cmd := exec.CommandContext(ctx, shell, scriptPath)
 
 	// Set a clean environment with only essential variables
 	cmd.Env = []string{
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/sbin:/opt/bin",
 		"HOME=/root",
-		"SHELL=/bin/bash",
+		"SHELL=" + shell,
 	}
 
 	// Capture both stdout and stderr

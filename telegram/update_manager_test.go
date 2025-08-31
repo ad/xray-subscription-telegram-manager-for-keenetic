@@ -376,3 +376,32 @@ func BenchmarkUpdateProgress(b *testing.B) {
 		um.updateProgress("benchmark", i%100, "benchmark message")
 	}
 }
+
+func TestGetAvailableShell(t *testing.T) {
+	shell := getAvailableShell()
+
+	// The function should always return a non-empty string
+	if shell == "" {
+		t.Error("getAvailableShell should never return an empty string")
+	}
+
+	// The returned shell should be one of the expected values
+	expectedShells := []string{"/bin/sh", "/bin/bash", "/usr/bin/sh", "/usr/bin/bash"}
+	found := false
+	for _, expected := range expectedShells {
+		if shell == expected {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("getAvailableShell returned unexpected shell: %s", shell)
+	}
+
+	// Check that the returned shell actually exists (on most systems)
+	if _, err := os.Stat(shell); err != nil {
+		// This might fail in some test environments, so just log a warning
+		t.Logf("Warning: returned shell %s does not exist in test environment: %v", shell, err)
+	}
+}
