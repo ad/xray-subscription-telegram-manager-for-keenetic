@@ -393,28 +393,44 @@ func (um *UpdateManager) executeScript(ctx context.Context, scriptPath string) e
 		// Continue anyway, as the shell might still be able to execute it
 	}
 
-	// Execute the script with restricted environment
 	shell := getAvailableShell()
 	um.logger.Debug("Using shell: %s for script execution", shell)
-	cmd := exec.CommandContext(ctx, shell, scriptPath, "--force")
 
-	// Set a clean environment with only essential variables
+	// If systemd-run is available, execute as a transient unit so it survives service stop
+	if hasSystemdRun() {
+		args := []string{
+			"--unit", "xray-telegram-manager-update",
+			"--quiet",
+			shell, scriptPath, "--force",
+		}
+		cmd := exec.CommandContext(ctx, "systemd-run", args...)
+		// Minimal env
+		cmd.Env = []string{
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/sbin:/opt/bin",
+			"HOME=/root",
+			"SHELL=" + shell,
+		}
+		if err := cmd.Start(); err != nil {
+			um.logger.Error("Failed to start update via systemd-run: %v", err)
+			return fmt.Errorf("failed to start detached updater: %w", err)
+		}
+		um.logger.Info("Update launched as transient systemd unit; service will be restarted by updater")
+		return nil
+	}
+
+	// Fallback: nohup in background (OpenWrt/BusyBox etc.)
+	// Use sh -c to run nohup and background the process so that stop script doesn't kill it
+	cmd := exec.CommandContext(ctx, shell, "-c", fmt.Sprintf("nohup %s '%s' --force >/tmp/xray-tg-update.log 2>&1 &", shell, scriptPath))
 	cmd.Env = []string{
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/sbin:/opt/bin",
 		"HOME=/root",
 		"SHELL=" + shell,
 	}
-
-	// Capture both stdout and stderr
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		um.logger.Error("Update script execution failed: %v", err)
-		um.logger.Error("Script output: %s", string(output))
-		return fmt.Errorf("script execution failed: %w", err)
+	if err := cmd.Start(); err != nil {
+		um.logger.Error("Failed to start detached update script: %v", err)
+		return fmt.Errorf("failed to start detached updater: %w", err)
 	}
-
-	um.logger.Info("Update script executed successfully")
-	um.logger.Debug("Script output: %s", string(output))
+	um.logger.Info("Update script started in background; service will be restarted by updater")
 	return nil
 }
 
@@ -439,6 +455,17 @@ func (um *UpdateManager) isValidScriptPath(path string) bool {
 	}
 
 	return true
+}
+
+// hasSystemdRun checks if systemd-run is available on the system
+func hasSystemdRun() bool {
+	if _, err := os.Stat("/bin/systemd-run"); err == nil {
+		return true
+	}
+	if _, err := os.Stat("/usr/bin/systemd-run"); err == nil {
+		return true
+	}
+	return false
 }
 
 // updateProgress updates the current progress and sends notification

@@ -216,9 +216,12 @@ func (mm *MessageManager) editMessageWithRetry(ctx context.Context, params *bot.
 				mm.logger.Debug("Edit skipped: message %d content is identical; treating as success", params.MessageID)
 				return nil
 			}
+			// Only log a failed attempt when there is a real error
+			mm.logger.Debug("Attempt %d failed to edit message %d: %v", attempt+1, params.MessageID, err)
+		} else {
+			// Success
+			return nil
 		}
-
-		mm.logger.Debug("Attempt %d failed to edit message %d: %v", attempt+1, params.MessageID, err)
 
 		// Check if we should retry based on error type
 		if !mm.shouldRetry(err) {

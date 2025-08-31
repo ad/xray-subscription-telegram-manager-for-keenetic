@@ -24,6 +24,8 @@ type TelegramBot struct {
 	// Rate limiting for ping progress updates
 	lastPingUpdate  map[int64]time.Time
 	pingUpdateMutex sync.RWMutex
+	// Aggregated logging for skipped ping updates
+	pingSkipCount map[int64]int
 }
 
 func NewTelegramBot(config ConfigProvider, serverMgr ServerManager, logger Logger) (*TelegramBot, error) {
@@ -65,6 +67,7 @@ func NewTelegramBot(config ConfigProvider, serverMgr ServerManager, logger Logge
 		logger:         logger,
 		rateLimiter:    rateLimiter,
 		lastPingUpdate: make(map[int64]time.Time),
+		pingSkipCount:  make(map[int64]int),
 	}
 
 	tb.messageManager = NewMessageManager(b, logger)
@@ -439,6 +442,18 @@ func (tb *TelegramBot) canSendPingUpdate(userID int64) bool {
 func (tb *TelegramBot) markPingUpdateSent(userID int64) {
 	tb.pingUpdateMutex.Lock()
 	tb.lastPingUpdate[userID] = time.Now()
+	// If there were skipped updates aggregated, log them once now
+	if skipped := tb.pingSkipCount[userID]; skipped > 0 {
+		tb.logger.Debug("Skipped %d ping updates for user %d due to rate limiting", skipped, userID)
+		delete(tb.pingSkipCount, userID)
+	}
+	tb.pingUpdateMutex.Unlock()
+}
+
+// markPingSkip increments the skip counter for a user without spamming logs
+func (tb *TelegramBot) markPingSkip(userID int64) {
+	tb.pingUpdateMutex.Lock()
+	tb.pingSkipCount[userID] = tb.pingSkipCount[userID] + 1
 	tb.pingUpdateMutex.Unlock()
 }
 
@@ -482,7 +497,7 @@ func (tb *TelegramBot) handlePingTestCallback(ctx context.Context, b *bot.Bot, c
 	progressCallback := func(completed, total int, serverName string) {
 		// Check rate limiting - only send update if enough time has passed
 		if !tb.canSendPingUpdate(chatID) {
-			tb.logger.Debug("Skipping ping update for user %d due to rate limiting", chatID)
+			tb.markPingSkip(chatID)
 			return
 		}
 
