@@ -57,9 +57,9 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version-file: go.mod
           cache: false # Disable automatic caching to prevent conflicts
 
       # Temporarily disable Go caching completely to fix conflicts
@@ -173,7 +173,9 @@ jobs:
           CGO_ENABLED: 0
         run: |
           cd /tmp/build-${{ matrix.suffix }}
-          go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+          BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
+          GO_VERS=$(go version | awk '{print $3}')
+          go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.VERSION }} -X main.BuildTime=${BUILD_TIME} -X main.GoVersion=${GO_VERS}" \
             -o xray-telegram-manager-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }} .
 
       - name: Compress binary with UPX
