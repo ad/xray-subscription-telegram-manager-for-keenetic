@@ -161,11 +161,11 @@ func (nh *NavigationHelper) CreateServerStatusNavigationKeyboard(isCurrentServer
 	var keyboard [][]models.InlineKeyboardButton
 
 	if isCurrentServer {
-		// Actions for current server
-		keyboard = append(keyboard, []models.InlineKeyboardButton{
-			{Text: "📊 Test Connection", CallbackData: "ping_test"},
-			{Text: "📋 Switch Server", CallbackData: "refresh"},
-		})
+		// // Actions for current server
+		// keyboard = append(keyboard, []models.InlineKeyboardButton{
+		// 	{Text: "📊 Test Connection", CallbackData: "ping_test"},
+		// 	{Text: "📋 Switch Server", CallbackData: "refresh"},
+		// })
 
 		// Next logical actions for current server
 		if nh.enableNextActions {
@@ -481,16 +481,16 @@ func (nh *NavigationHelper) CreateBreadcrumbNavigation(currentPage string) []mod
 			Text: "📊 Ping Test", CallbackData: "noop",
 		})
 
-	case "server_status":
-		breadcrumbs = append(breadcrumbs, models.InlineKeyboardButton{
-			Text: "🏠 Main", CallbackData: "main_menu",
-		})
-		breadcrumbs = append(breadcrumbs, models.InlineKeyboardButton{
-			Text: "📋 Servers", CallbackData: "refresh",
-		})
-		breadcrumbs = append(breadcrumbs, models.InlineKeyboardButton{
-			Text: "📊 Status", CallbackData: "noop",
-		})
+	// case "server_status":
+	// 	breadcrumbs = append(breadcrumbs, models.InlineKeyboardButton{
+	// 		Text: "🏠 Main", CallbackData: "main_menu",
+	// 	})
+	// 	breadcrumbs = append(breadcrumbs, models.InlineKeyboardButton{
+	// 		Text: "📋 Servers", CallbackData: "refresh",
+	// 	})
+	// 	breadcrumbs = append(breadcrumbs, models.InlineKeyboardButton{
+	// 		Text: "📊 Status", CallbackData: "noop",
+	// 	})
 
 	case "update":
 		breadcrumbs = append(breadcrumbs, models.InlineKeyboardButton{

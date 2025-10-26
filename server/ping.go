@@ -31,7 +31,7 @@ func (pt *PingTesterImpl) TestServersWithProgress(servers []types.Server, progre
 	var wg sync.WaitGroup
 	var completedMutex sync.Mutex
 	completed := 0
-	semaphore := make(chan struct{}, 10) // Limit to 10 concurrent tests
+	semaphore := make(chan struct{}, 5) // Limit to 5 concurrent tests
 	for i, server := range servers {
 		wg.Add(1)
 		go func(index int, srv types.Server) {
