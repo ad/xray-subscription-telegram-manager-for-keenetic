@@ -256,6 +256,51 @@ func (sm *ServerManager) DetectCurrentServer() error {
 	sm.mutex.Unlock()
 	return fmt.Errorf("current xray configuration does not match any available servers")
 }
+
+func (sm *ServerManager) EnableVPN() error {
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+
+	isRunning, err := sm.xrayController.IsServiceRunning()
+	if err != nil {
+		return fmt.Errorf("failed to check xray service status: %w", err)
+	}
+
+	if isRunning {
+		return fmt.Errorf("VPN is already enabled")
+	}
+
+	if err := sm.xrayController.StartService(); err != nil {
+		return fmt.Errorf("failed to enable VPN: %w", err)
+	}
+
+	return nil
+}
+
+func (sm *ServerManager) DisableVPN() error {
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+
+	isRunning, err := sm.xrayController.IsServiceRunning()
+	if err != nil {
+		return fmt.Errorf("failed to check xray service status: %w", err)
+	}
+
+	if !isRunning {
+		return fmt.Errorf("VPN is already disabled")
+	}
+
+	if err := sm.xrayController.StopService(); err != nil {
+		return fmt.Errorf("failed to disable VPN: %w", err)
+	}
+
+	return nil
+}
+
+func (sm *ServerManager) IsVPNEnabled() (bool, error) {
+	return sm.xrayController.IsServiceRunning()
+}
+
 func (sm *ServerManager) serverMatchesOutbound(server types.Server, outbound types.XrayOutbound) bool {
 	// Basic protocol check
 	if server.Protocol != outbound.Protocol {

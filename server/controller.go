@@ -78,7 +78,78 @@ func (xc *XrayController) RestartService() error {
 		}
 	}
 	return nil
+}
+
+func (xc *XrayController) StopService() error {
+	stopCmd := "/opt/etc/init.d/S24xray stop"
+	cmd := exec.Command("/bin/sh", "-c", stopCmd)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start xray stop command: %w", err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+	select {
+	case <-ctx.Done():
+		if cmd.Process != nil {
+			if err := cmd.Process.Kill(); err != nil {
+				_ = err
+			}
+		}
+		return fmt.Errorf("xray stop command timed out after 30 seconds")
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("failed to stop xray service: %w", err)
+		}
+	}
+	return nil
+}
+
+func (xc *XrayController) StartService() error {
+	startCmd := "/opt/etc/init.d/S24xray start"
+	cmd := exec.Command("/bin/sh", "-c", startCmd)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start xray start command: %w", err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+	select {
+	case <-ctx.Done():
+		if cmd.Process != nil {
+			if err := cmd.Process.Kill(); err != nil {
+				_ = err
+			}
+		}
+		return fmt.Errorf("xray start command timed out after 30 seconds")
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("failed to start xray service: %w", err)
+		}
+	}
+	return nil
+}
+
+func (xc *XrayController) IsServiceRunning() (bool, error) {
+	statusCmd := "/opt/etc/init.d/S24xray status"
+	cmd := exec.Command("/bin/sh", "-c", statusCmd)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return false, fmt.Errorf("xray status check timed out")
+	}
+
+	return err == nil, nil
 } // GetCurrentConfig reads and parses the current xray configuration (thread-safe)
+
 func (xc *XrayController) GetCurrentConfig() (*types.XrayConfig, error) {
 	xc.mutex.Lock()
 	defer xc.mutex.Unlock()

@@ -32,4 +32,7 @@ type ServerManager interface {
 	GetServerStatus() (map[string]interface{}, error)
 	SetCurrentServer(serverID string) error
 	DetectCurrentServer() error
+	EnableVPN() error
+	DisableVPN() error
+	IsVPNEnabled() (bool, error)
 }

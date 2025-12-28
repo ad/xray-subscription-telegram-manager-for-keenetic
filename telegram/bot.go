@@ -115,9 +115,10 @@ func (tb *TelegramBot) registerHandlers() {
 	tb.bot.RegisterHandler(bot.HandlerTypeMessageText, "/status", bot.MatchTypeExact, tb.handlers.handleStatus)
 	tb.bot.RegisterHandler(bot.HandlerTypeMessageText, "/ping", bot.MatchTypeExact, tb.handlePing)
 	tb.bot.RegisterHandler(bot.HandlerTypeMessageText, "/update", bot.MatchTypeExact, tb.handlers.handleUpdate)
+	tb.bot.RegisterHandler(bot.HandlerTypeMessageText, "/vpn", bot.MatchTypeExact, tb.handleVPN)
 	tb.bot.RegisterHandler(bot.HandlerTypeCallbackQueryData, "", bot.MatchTypePrefix, tb.handleCallback)
 
-	tb.logger.Info("Registered handlers for commands: /start, /list, /status, /ping, /update and callback queries")
+	tb.logger.Info("Registered handlers for commands: /start, /list, /status, /ping, /update, /vpn and callback queries")
 }
 
 func (tb *TelegramBot) isAuthorized(userID int64) bool {
@@ -252,6 +253,15 @@ func (tb *TelegramBot) handleCallback(ctx context.Context, b *bot.Bot, update *m
 	case data == "status":
 		tb.logger.Debug("Processing status callback for user %d", userID)
 		tb.handleStatusCallback(ctx, b, chatID, update.CallbackQuery.ID)
+	case data == "vpn_toggle":
+		tb.logger.Debug("Processing vpn_toggle callback for user %d", userID)
+		tb.handleVPNToggleCallback(ctx, b, chatID, update.CallbackQuery.ID)
+	case data == "vpn_enable":
+		tb.logger.Debug("Processing vpn_enable callback for user %d", userID)
+		tb.handleVPNEnableCallback(ctx, b, chatID, update.CallbackQuery.ID)
+	case data == "vpn_disable":
+		tb.logger.Debug("Processing vpn_disable callback for user %d", userID)
+		tb.handleVPNDisableCallback(ctx, b, chatID, update.CallbackQuery.ID)
 	case len(data) > 5 && data[:5] == "page_":
 		tb.logger.Debug("Processing pagination callback for user %d: %s", userID, data)
 		tb.handlePaginationCallback(ctx, b, chatID, update.CallbackQuery.ID, data)
@@ -1198,5 +1208,256 @@ func (tb *TelegramBot) handleStatusCallback(ctx context.Context, b *bot.Bot, cha
 		tb.logger.Error("Failed to send final status message: %v", err)
 	} else {
 		tb.logger.Info("Successfully sent server status to user %d", chatID)
+	}
+}
+
+func (tb *TelegramBot) handleVPN(ctx context.Context, b *bot.Bot, update *models.Update) {
+	userID := update.Message.From.ID
+	username := update.Message.From.Username
+	tb.logger.Info("Received /vpn command from user %d (@%s)", userID, username)
+
+	if !tb.isAuthorized(userID) {
+		tb.logger.Warn("Unauthorized access attempt from user %d (@%s) for /vpn command", userID, username)
+		tb.sendUnauthorizedMessage(ctx, b, update.Message.Chat.ID)
+		return
+	}
+
+	tb.logger.Debug("User %d is authorized, processing /vpn command", userID)
+	tb.handleVPNToggleCallback(ctx, b, update.Message.Chat.ID, "")
+}
+
+func (tb *TelegramBot) handleVPNToggleCallback(ctx context.Context, b *bot.Bot, chatID int64, callbackQueryID string) {
+	tb.logger.Info("Processing VPN toggle callback for user %d", chatID)
+
+	if callbackQueryID != "" {
+		_, _ = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: callbackQueryID,
+			Text:            "🔄 Checking VPN status...",
+		})
+	}
+
+	isEnabled, err := tb.serverMgr.IsVPNEnabled()
+	if err != nil {
+		tb.logger.Error("Failed to check VPN status: %v", err)
+		tb.sendVPNErrorMessage(ctx, b, chatID, "Failed to Check VPN Status", err.Error())
+		return
+	}
+
+	// messageFormatter := NewMessageFormatter()
+	var message string
+	var keyboard *models.InlineKeyboardMarkup
+
+	if isEnabled {
+		message = "🟢 VPN Status: Enabled\n\n" +
+			"✅ Xray service is currently running\n" +
+			"🌐 Traffic is being routed through VPN\n\n" +
+			"You can disable VPN to access local resources directly."
+
+		keyboard = &models.InlineKeyboardMarkup{
+			InlineKeyboard: [][]models.InlineKeyboardButton{
+				{
+					{Text: "🔴 Disable VPN", CallbackData: "vpn_disable"},
+				},
+				{
+					{Text: "📊 Check Status", CallbackData: "status"},
+					{Text: "📋 Server List", CallbackData: "refresh"},
+				},
+				{
+					{Text: "🏠 Main Menu", CallbackData: "main_menu"},
+				},
+			},
+		}
+	} else {
+		message = "🔴 VPN Status: Disabled\n\n" +
+			"❌ Xray service is currently stopped\n" +
+			"🌐 Traffic is using direct connection\n\n" +
+			"You can enable VPN to route traffic through selected server."
+
+		keyboard = &models.InlineKeyboardMarkup{
+			InlineKeyboard: [][]models.InlineKeyboardButton{
+				{
+					{Text: "🟢 Enable VPN", CallbackData: "vpn_enable"},
+				},
+				{
+					{Text: "📋 Select Server", CallbackData: "refresh"},
+					{Text: "📊 Test Servers", CallbackData: "ping_test"},
+				},
+				{
+					{Text: "🏠 Main Menu", CallbackData: "main_menu"},
+				},
+			},
+		}
+	}
+
+	vpnStatusContent := MessageContent{
+		Text:        message,
+		ReplyMarkup: keyboard,
+		Type:        MessageTypeStatus,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, vpnStatusContent); err != nil {
+		tb.logger.Error("Failed to send VPN status message: %v", err)
+	} else {
+		tb.logger.Info("Successfully sent VPN status to user %d", chatID)
+	}
+}
+
+func (tb *TelegramBot) handleVPNEnableCallback(ctx context.Context, b *bot.Bot, chatID int64, callbackQueryID string) {
+	tb.logger.Info("Processing VPN enable callback for user %d", chatID)
+
+	_, _ = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+		CallbackQueryID: callbackQueryID,
+		Text:            "🟢 Enabling VPN...",
+	})
+
+	loadingContent := MessageContent{
+		Text:        "🔄 Enabling VPN...\n\n⏳ Starting Xray service...\nPlease wait...",
+		ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}},
+		Type:        MessageTypeStatus,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, loadingContent); err != nil {
+		tb.logger.Error("Failed to send VPN enable loading message: %v", err)
+		return
+	}
+
+	if err := tb.serverMgr.EnableVPN(); err != nil {
+		tb.logger.Error("Failed to enable VPN: %v", err)
+		tb.sendVPNErrorMessage(ctx, b, chatID, "Failed to Enable VPN", err.Error())
+		return
+	}
+
+	tb.logger.Info("VPN enabled successfully for user %d", chatID)
+
+	message := "✅ VPN Enabled Successfully\n\n" +
+		"🟢 Status: Xray service is now running\n" +
+		"🌐 Traffic: Routing through VPN\n\n" +
+		"🎉 Your connection is now secured!"
+
+	keyboard := &models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: "📊 Check Status", CallbackData: "status"},
+				{Text: "📊 Test Connection", CallbackData: "ping_test"},
+			},
+			{
+				{Text: "🔴 Disable VPN", CallbackData: "vpn_disable"},
+			},
+			{
+				{Text: "🏠 Main Menu", CallbackData: "main_menu"},
+			},
+		},
+	}
+
+	successContent := MessageContent{
+		Text:        message,
+		ReplyMarkup: keyboard,
+		Type:        MessageTypeStatus,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, successContent); err != nil {
+		tb.logger.Error("Failed to send VPN enable success message: %v", err)
+	} else {
+		tb.logger.Info("Successfully sent VPN enable success message to user %d", chatID)
+	}
+}
+
+func (tb *TelegramBot) handleVPNDisableCallback(ctx context.Context, b *bot.Bot, chatID int64, callbackQueryID string) {
+	tb.logger.Info("Processing VPN disable callback for user %d", chatID)
+
+	_, _ = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+		CallbackQueryID: callbackQueryID,
+		Text:            "🔴 Disabling VPN...",
+	})
+
+	loadingContent := MessageContent{
+		Text:        "🔄 Disabling VPN...\n\n⏳ Stopping Xray service...\nPlease wait...",
+		ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}},
+		Type:        MessageTypeStatus,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, loadingContent); err != nil {
+		tb.logger.Error("Failed to send VPN disable loading message: %v", err)
+		return
+	}
+
+	if err := tb.serverMgr.DisableVPN(); err != nil {
+		tb.logger.Error("Failed to disable VPN: %v", err)
+		tb.sendVPNErrorMessage(ctx, b, chatID, "Failed to Disable VPN", err.Error())
+		return
+	}
+
+	tb.logger.Info("VPN disabled successfully for user %d", chatID)
+
+	message := "✅ VPN Disabled Successfully\n\n" +
+		"🔴 Status: Xray service is now stopped\n" +
+		"🌐 Traffic: Using direct connection\n\n" +
+		"💡 You can now access local resources directly."
+
+	keyboard := &models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: "🟢 Enable VPN", CallbackData: "vpn_enable"},
+			},
+			{
+				{Text: "📋 Select Server", CallbackData: "refresh"},
+				{Text: "📊 Test Servers", CallbackData: "ping_test"},
+			},
+			{
+				{Text: "🏠 Main Menu", CallbackData: "main_menu"},
+			},
+		},
+	}
+
+	successContent := MessageContent{
+		Text:        message,
+		ReplyMarkup: keyboard,
+		Type:        MessageTypeStatus,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, successContent); err != nil {
+		tb.logger.Error("Failed to send VPN disable success message: %v", err)
+	} else {
+		tb.logger.Info("Successfully sent VPN disable success message to user %d", chatID)
+	}
+}
+
+func (tb *TelegramBot) sendVPNErrorMessage(ctx context.Context, _ *bot.Bot, chatID int64, title, description string) {
+	tb.logger.Debug("Sending VPN error message to user %d: %s - %s", chatID, title, description)
+
+	messageFormatter := NewMessageFormatter()
+	suggestions := []string{
+		"Check if Xray service is properly installed",
+		"Verify service permissions",
+		"Try again in a few moments",
+		"Check system logs for details",
+	}
+	message := messageFormatter.FormatErrorMessage(title, description, suggestions)
+
+	keyboard := &models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: "🔄 Check VPN Status", CallbackData: "vpn_toggle"},
+			},
+			{
+				{Text: "📊 Check Service Status", CallbackData: "status"},
+				{Text: "📋 Server List", CallbackData: "refresh"},
+			},
+			{
+				{Text: "🏠 Main Menu", CallbackData: "main_menu"},
+			},
+		},
+	}
+
+	errorContent := MessageContent{
+		Text:        message,
+		ReplyMarkup: keyboard,
+		Type:        MessageTypeStatus,
+	}
+
+	if err := tb.messageManager.SendOrEdit(ctx, chatID, errorContent); err != nil {
+		tb.logger.Error("Failed to send VPN error message '%s': %v", title, err)
+	} else {
+		tb.logger.Debug("Successfully sent VPN error message '%s' to user %d", title, chatID)
 	}
 }

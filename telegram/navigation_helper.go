@@ -33,6 +33,11 @@ func (nh *NavigationHelper) CreateMainMenuKeyboard() *models.InlineKeyboardMarku
 		{Text: "📊 Ping Test", CallbackData: "ping_test"},
 	})
 
+	// VPN control actions
+	keyboard = append(keyboard, []models.InlineKeyboardButton{
+		{Text: "🔄 VPN Control", CallbackData: "vpn_toggle"},
+	})
+
 	// Additional helpful actions if enabled
 	if nh.enableNextActions {
 		keyboard = append(keyboard, []models.InlineKeyboardButton{
