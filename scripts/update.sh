@@ -254,12 +254,12 @@ update_binary() {
     local binary_path=""
     
     # Try to find the appropriate binary
-    if [ -f "./dist/${BINARY_NAME}-mips-softfloat" ]; then
+    if [ -f "./${BINARY_NAME}" ]; then
+        binary_path="./${BINARY_NAME}"
+    elif [ -f "./dist/${BINARY_NAME}-mips-softfloat" ]; then
         binary_path="./dist/${BINARY_NAME}-mips-softfloat"
     elif [ -f "./dist/${BINARY_NAME}-mips-hardfloat" ]; then
         binary_path="./dist/${BINARY_NAME}-mips-hardfloat"
-    elif [ -f "./${BINARY_NAME}" ]; then
-        binary_path="./${BINARY_NAME}"
     else
         print_warn "Local build artifacts not found. Trying to download latest release..."
         binary_path=$(download_latest_binary) || {

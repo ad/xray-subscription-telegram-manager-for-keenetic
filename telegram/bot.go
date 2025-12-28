@@ -1010,21 +1010,27 @@ func (tb *TelegramBot) handleUpdateMenuCallback(ctx context.Context, b *bot.Bot,
 		Text:            "🔄 Checking for updates...",
 	})
 
-	// Get update manager from handlers
 	updateManager := tb.handlers.updateManager
 
-	// Get version information
 	versionInfo, err := updateManager.GetVersionInfo()
 	if err != nil {
 		tb.logger.Error("Failed to get version info: %v", err)
-		// Fallback to basic message
+
 		message := "🔄 Bot Update Options\n\n" +
 			"❌ Unable to check for updates\n" +
 			"Error: " + err.Error() + "\n\n" +
 			"You can still try to update manually."
 
-		navigationHelper := NewNavigationHelper()
-		keyboard := navigationHelper.CreateUpdateNavigationKeyboard("status")
+		keyboard := &models.InlineKeyboardMarkup{
+			InlineKeyboard: [][]models.InlineKeyboardButton{
+				{
+					{Text: "🔄 Try Update Anyway", CallbackData: "confirm_update"},
+				},
+				{
+					{Text: "🏠 Main Menu", CallbackData: "main_menu"},
+				},
+			},
+		}
 
 		updateMenuContent := MessageContent{
 			Text:        message,
@@ -1036,10 +1042,11 @@ func (tb *TelegramBot) handleUpdateMenuCallback(ctx context.Context, b *bot.Bot,
 		return
 	}
 
-	// Build version message
 	message := "🔄 Bot Update Information\n\n"
 	message += fmt.Sprintf("📦 Current Version: %s\n", versionInfo.Current)
 	message += fmt.Sprintf("🆕 Latest Version: %s\n\n", versionInfo.Latest)
+
+	var keyboard *models.InlineKeyboardMarkup
 
 	if versionInfo.UpdateAvailable {
 		message += "✅ Update Available!\n\n"
@@ -1048,21 +1055,31 @@ func (tb *TelegramBot) handleUpdateMenuCallback(ctx context.Context, b *bot.Bot,
 			message += versionInfo.ReleaseNotes + "\n\n"
 		}
 		message += "⚠️ Note: Updates will briefly interrupt bot service"
+
+		keyboard = &models.InlineKeyboardMarkup{
+			InlineKeyboard: [][]models.InlineKeyboardButton{
+				{
+					{Text: "🔄 Start Update", CallbackData: "confirm_update"},
+				},
+				{
+					{Text: "🏠 Main Menu", CallbackData: "main_menu"},
+				},
+			},
+		}
 	} else {
 		message += "✅ You are running the latest version!\n\n"
 		message += "No update is currently available."
-	}
 
-	// Create keyboard based on update availability
-	navigationHelper := NewNavigationHelper()
-	var keyboard *models.InlineKeyboardMarkup
-
-	if versionInfo.UpdateAvailable {
-		// Show update options when update is available
-		keyboard = navigationHelper.CreateUpdateNavigationKeyboard("update_available")
-	} else {
-		// Show status-only options when up to date
-		keyboard = navigationHelper.CreateUpdateNavigationKeyboard("up_to_date")
+		keyboard = &models.InlineKeyboardMarkup{
+			InlineKeyboard: [][]models.InlineKeyboardButton{
+				{
+					{Text: "🔄 Check Again", CallbackData: "update_menu"},
+				},
+				{
+					{Text: "🏠 Main Menu", CallbackData: "main_menu"},
+				},
+			},
+		}
 	}
 
 	updateMenuContent := MessageContent{
