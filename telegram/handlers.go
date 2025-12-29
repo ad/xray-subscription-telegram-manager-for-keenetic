@@ -531,16 +531,15 @@ func (ch *CommandHandlers) updateProgressMessage(ctx context.Context, b *bot.Bot
 }
 
 func (ch *CommandHandlers) sendUpdateCompleteMessage(ctx context.Context, b *bot.Bot, chatID int64, messageID int) {
-	message := "✅ Bot Update Complete\n\n" +
-		"🎉 Success! The bot has been updated to the latest version.\n\n" +
+	message := "🔄 Bot Update Started\n\n" +
+		"🎉 The update script has been successfully launched.\n\n" +
 		"📋 What was done:\n" +
 		"• ✅ Downloaded latest update script\n" +
 		"• ✅ Created configuration backup\n" +
-		"• ✅ Installed updates\n" +
-		"• ✅ Restarted bot service\n\n" +
-		"🟢 Status: Bot is now running the latest version\n" +
-		"🔄 Service: Fully operational\n\n" +
-		"💡 You can now continue using the bot normally."
+		"• ✅ Initiated update process\n\n" +
+		"🟢 Status: Service is restarting...\n" +
+		"🔄 Service: Will be back online shortly\n\n" +
+		"💡 Please wait 1-2 minutes before using the bot again."
 
 	keyboard := &models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{

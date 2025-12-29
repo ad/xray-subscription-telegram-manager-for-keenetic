@@ -178,11 +178,12 @@ has_systemd() {
 }
 
 # Function to check if service is running
+# Function to check if service is running
 is_service_running() {
-    if has_systemd && [ -f "$SYSTEMD_SERVICE_FILE" ]; then
-        systemctl is-active --quiet xray-telegram-manager.service
-    elif [ -f "$SERVICE_FILE" ]; then
+    if [ -f "$SERVICE_FILE" ]; then
         pgrep -f "$BINARY_NAME" >/dev/null
+    elif has_systemd && [ -f "$SYSTEMD_SERVICE_FILE" ]; then
+        systemctl is-active --quiet xray-telegram-manager.service
     else
         pgrep -f "$BINARY_NAME" >/dev/null
     fi
@@ -192,12 +193,12 @@ is_service_running() {
 stop_service() {
     print_step "Stopping service..."
     
-    if has_systemd && [ -f "$SYSTEMD_SERVICE_FILE" ]; then
-        systemctl stop xray-telegram-manager.service
-        print_info "✓ Systemd service stopped"
-    elif [ -f "$SERVICE_FILE" ]; then
+    if [ -f "$SERVICE_FILE" ]; then
         "$SERVICE_FILE" stop
         print_info "✓ OpenWrt service stopped"
+    elif has_systemd && [ -f "$SYSTEMD_SERVICE_FILE" ]; then
+        systemctl stop xray-telegram-manager.service
+        print_info "✓ Systemd service stopped"
     else
         pkill -f "$BINARY_NAME" 2>/dev/null || true
         print_info "✓ Process stopped"
@@ -217,12 +218,12 @@ stop_service() {
 start_service() {
     print_step "Starting service..."
     
-    if has_systemd && [ -f "$SYSTEMD_SERVICE_FILE" ]; then
-        systemctl start xray-telegram-manager.service
-        print_info "✓ Systemd service started"
-    elif [ -f "$SERVICE_FILE" ]; then
+    if [ -f "$SERVICE_FILE" ]; then
         "$SERVICE_FILE" start
         print_info "✓ OpenWrt service started"
+    elif has_systemd && [ -f "$SYSTEMD_SERVICE_FILE" ]; then
+        systemctl start xray-telegram-manager.service
+        print_info "✓ Systemd service started"
     else
         print_warn "No service configuration found, please start manually"
     fi
