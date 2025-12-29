@@ -205,6 +205,12 @@ stop_service() {
     
     # Wait for process to stop
     sleep 2
+    
+    # Force kill if still running
+    if pgrep -f "$BINARY_NAME" >/dev/null; then
+        print_warn "Process still running, forcing kill..."
+        pkill -9 -f "$BINARY_NAME" 2>/dev/null || true
+    fi
 }
 
 # Function to start service
@@ -276,9 +282,11 @@ update_binary() {
         current_binary="$INSTALL_DIR/$BINARY_NAME"
     fi
     
-    # Copy new binary
-    cp "$binary_path" "$current_binary"
-    chmod 755 "$current_binary"
+    # Install new binary safely (atomic replacement)
+    clean_binary_path="${current_binary}.new"
+    cp "$binary_path" "$clean_binary_path"
+    chmod 755 "$clean_binary_path"
+    mv "$clean_binary_path" "$current_binary"
     
     print_info "✓ Binary updated: $current_binary"
 }

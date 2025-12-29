@@ -171,7 +171,7 @@ func (um *UpdateManager) ExecuteUpdate(ctx context.Context) error {
 	}
 
 	// Step 4: Verify update completion (100% progress)
-	um.updateProgress("completing", 100, "Update completed successfully")
+	um.updateProgress("completing", 100, "Update script started. Service will restart momentarily.")
 	um.logger.Info("Bot update completed successfully - service should be restarted automatically")
 
 	return nil
