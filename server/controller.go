@@ -16,6 +16,7 @@ type XrayController struct {
 	config ConfigProvider
 	mutex  sync.Mutex // Protects file operations
 }
+
 type ConfigProvider interface {
 	GetConfigPath() string
 	GetXrayRestartCommand() string
@@ -27,6 +28,7 @@ func NewXrayController(config ConfigProvider) *XrayController {
 		mutex:  sync.Mutex{},
 	}
 }
+
 func (xc *XrayController) UpdateConfig(server types.Server) error {
 	xc.mutex.Lock()
 	defer xc.mutex.Unlock()
@@ -51,8 +53,9 @@ func (xc *XrayController) UpdateConfig(server types.Server) error {
 	}
 	return nil
 }
+
 func (xc *XrayController) RestartService() error {
-	restartCmd := xc.config.GetXrayRestartCommand()
+	restartCmd := "/opt/etc/init.d/S24xray restart"
 	cmd := exec.Command("/bin/sh", "-c", restartCmd)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -170,6 +173,7 @@ func (xc *XrayController) GetCurrentConfig() (*types.XrayConfig, error) {
 	defer xc.mutex.Unlock()
 	return xc.getCurrentConfigUnsafe()
 }
+
 func (xc *XrayController) getCurrentConfigUnsafe() (*types.XrayConfig, error) {
 	data, err := os.ReadFile(xc.config.GetConfigPath())
 	if err != nil {
@@ -181,11 +185,13 @@ func (xc *XrayController) getCurrentConfigUnsafe() (*types.XrayConfig, error) {
 	}
 	return &config, nil
 }
+
 func (xc *XrayController) BackupConfig() error {
 	xc.mutex.Lock()
 	defer xc.mutex.Unlock()
 	return xc.backupConfigUnsafe()
 }
+
 func (xc *XrayController) backupConfigUnsafe() error {
 	configPath := xc.config.GetConfigPath()
 	data, err := os.ReadFile(configPath)
@@ -198,11 +204,13 @@ func (xc *XrayController) backupConfigUnsafe() error {
 	}
 	return nil
 }
+
 func (xc *XrayController) RestoreConfig() error {
 	xc.mutex.Lock()
 	defer xc.mutex.Unlock()
 	return xc.restoreConfigUnsafe()
 }
+
 func (xc *XrayController) restoreConfigUnsafe() error {
 	configPath := xc.config.GetConfigPath()
 	backupPattern := configPath + ".backup.*"
@@ -237,6 +245,7 @@ func (xc *XrayController) restoreConfigUnsafe() error {
 	}
 	return nil
 }
+
 func (xc *XrayController) writeConfigUnsafe(config *types.XrayConfig) error {
 	data, err := json.MarshalIndent(config, "", "    ")
 	if err != nil {
@@ -244,6 +253,7 @@ func (xc *XrayController) writeConfigUnsafe(config *types.XrayConfig) error {
 	}
 	return xc.writeFileAtomicUnsafe(xc.config.GetConfigPath(), data)
 }
+
 func (xc *XrayController) writeFileAtomicUnsafe(filePath string, data []byte) error {
 	tempPath := fmt.Sprintf("%s.tmp.%d.%d", filePath, time.Now().UnixNano(), os.Getpid())
 	if err := os.WriteFile(tempPath, data, 0644); err != nil {
@@ -258,6 +268,7 @@ func (xc *XrayController) writeFileAtomicUnsafe(filePath string, data []byte) er
 	}
 	return nil
 }
+
 func (xc *XrayController) replaceProxyOutbound(config *types.XrayConfig, server types.Server) error {
 	newOutbound := types.XrayOutbound{
 		Tag:            server.Tag,
@@ -278,6 +289,7 @@ func (xc *XrayController) replaceProxyOutbound(config *types.XrayConfig, server 
 	}
 	return nil
 }
+
 func (xc *XrayController) ReplaceProxyOutbound(server types.Server) error {
 	xc.mutex.Lock()
 	defer xc.mutex.Unlock()
