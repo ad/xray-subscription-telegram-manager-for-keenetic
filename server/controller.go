@@ -147,16 +147,18 @@ func (xc *XrayController) IsServiceRunning() (bool, error) {
 		return false, fmt.Errorf("xray status check timed out")
 	}
 
-	// Check for exit code 127 which means running
-	if exitErr, ok := err.(*exec.ExitError); ok {
-		if exitErr.ExitCode() == 127 {
-			return true, nil
-		}
+	// Exit code 0 means running
+	if err == nil {
+		return true, nil
 	}
 
-	// Exit code 0 means stopped
-	if err == nil {
-		return false, nil
+	// Check for exit codes that mean "stopped"
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		// 1: Generic error (often used for dead/not running)
+		// 3: Program is not running
+		if exitErr.ExitCode() == 1 || exitErr.ExitCode() == 3 {
+			return false, nil
+		}
 	}
 
 	return false, err
