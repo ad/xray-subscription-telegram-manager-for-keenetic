@@ -267,7 +267,8 @@ func (sm *ServerManager) EnableVPN() error {
 	}
 
 	if isRunning {
-		return fmt.Errorf("VPN is already enabled")
+		sm.logger.Info("VPN enable requested but service is already running")
+		return nil
 	}
 
 	if err := sm.xrayController.StartService(); err != nil {
@@ -287,7 +288,8 @@ func (sm *ServerManager) DisableVPN() error {
 	}
 
 	if !isRunning {
-		return fmt.Errorf("VPN is already disabled")
+		sm.logger.Info("VPN disable requested but service is already stopped")
+		return nil
 	}
 
 	if err := sm.xrayController.StopService(); err != nil {
