@@ -381,12 +381,21 @@ func (ch *CommandHandlers) handleUpdateConfirm(ctx context.Context, b *bot.Bot, 
 		"⏳ Please wait while the update is being processed.\n" +
 		"🔔 You will be notified when the update is complete."
 
-	progressMsg, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   message,
-	})
-	if err != nil {
+	content := MessageContent{
+		Text: message,
+		Type: MessageTypeStatus,
+	}
+
+	if err := ch.bot.messageManager.SendOrEdit(ctx, chatID, content); err != nil {
 		ch.bot.logger.Error("Failed to send initial update progress message: %v", err)
+		return
+	}
+
+	var messageID int
+	if activeMsg := ch.bot.messageManager.GetActiveMessage(chatID); activeMsg != nil {
+		messageID = activeMsg.MessageID
+	} else {
+		ch.bot.logger.Error("Could not retrieve active message ID for update progress")
 		return
 	}
 
@@ -399,7 +408,7 @@ func (ch *CommandHandlers) handleUpdateConfirm(ctx context.Context, b *bot.Bot, 
 		updateErr := ch.updateManager.ExecuteUpdate(ctx)
 		if updateErr != nil {
 			ch.bot.logger.Error("Update failed: %v", updateErr)
-			ch.sendUpdateErrorMessage(ctx, b, chatID, progressMsg.ID, updateErr)
+			ch.sendUpdateErrorMessage(ctx, b, chatID, messageID, updateErr)
 		}
 	}()
 
@@ -414,33 +423,33 @@ func (ch *CommandHandlers) handleUpdateConfirm(ctx context.Context, b *bot.Bot, 
 		case progress, ok := <-progressChan:
 			if !ok {
 				// Channel closed, update completed
-				ch.sendUpdateCompleteMessage(ctx, b, chatID, progressMsg.ID)
+				ch.sendUpdateCompleteMessage(ctx, b, chatID, messageID)
 				return
 			}
 
 			if progress.Error != nil {
-				ch.sendUpdateErrorMessage(ctx, b, chatID, progressMsg.ID, progress.Error)
+				ch.sendUpdateErrorMessage(ctx, b, chatID, messageID, progress.Error)
 				return
 			}
 
 			// Update progress message
-			ch.updateProgressMessage(ctx, b, chatID, progressMsg.ID, progress)
+			ch.updateProgressMessage(ctx, b, chatID, messageID, progress)
 
 		case <-ticker.C:
 			// Check if update completed
 			status := ch.updateManager.GetUpdateStatus()
 			if !status.InProgress {
 				if status.Error != nil {
-					ch.sendUpdateErrorMessage(ctx, b, chatID, progressMsg.ID, status.Error)
+					ch.sendUpdateErrorMessage(ctx, b, chatID, messageID, status.Error)
 				} else {
-					ch.sendUpdateCompleteMessage(ctx, b, chatID, progressMsg.ID)
+					ch.sendUpdateCompleteMessage(ctx, b, chatID, messageID)
 				}
 				return
 			}
 
 		case <-timeout:
 			ch.bot.logger.Error("Update timeout for user %d", chatID)
-			ch.sendUpdateTimeoutMessage(ctx, b, chatID, progressMsg.ID)
+			ch.sendUpdateTimeoutMessage(ctx, b, chatID, messageID)
 			return
 
 		case <-ctx.Done():
@@ -470,13 +479,13 @@ func (ch *CommandHandlers) sendUpdateInProgressMessage(ctx context.Context, b *b
 		},
 	}
 
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:      chatID,
+	content := MessageContent{
 		Text:        message,
 		ReplyMarkup: keyboard,
-	})
+		Type:        MessageTypeStatus,
+	}
 
-	if err != nil {
+	if err := ch.bot.messageManager.SendOrEdit(ctx, chatID, content); err != nil {
 		ch.bot.logger.Error("Failed to send update in progress message: %v", err)
 	}
 }
@@ -736,13 +745,13 @@ func (ch *CommandHandlers) handleUpdateStatus(ctx context.Context, b *bot.Bot, c
 		}
 	}
 
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:      chatID,
+	content := MessageContent{
 		Text:        message,
 		ReplyMarkup: keyboard,
-	})
+		Type:        MessageTypeMenu,
+	}
 
-	if err != nil {
+	if err := ch.bot.messageManager.SendOrEdit(ctx, chatID, content); err != nil {
 		ch.bot.logger.Error("Failed to send update status message: %v", err)
 	} else {
 		ch.bot.logger.Info("Successfully sent update status to user %d", chatID)

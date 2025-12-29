@@ -189,6 +189,19 @@ func (mm *MessageManager) GetActiveMessage(userID int64) *ActiveMessage {
 	return activeMsg
 }
 
+// SetActiveMessage forces setting the active message for a user
+func (mm *MessageManager) SetActiveMessage(userID int64, chatID int64, messageID int) {
+	mm.mutex.Lock()
+	mm.activeMessages[userID] = &ActiveMessage{
+		ChatID:    chatID,
+		MessageID: messageID,
+		CreatedAt: time.Now(), // Treat as fresh
+	}
+	mm.mutex.Unlock()
+
+	mm.logger.Debug("Force set active message %d for user %d", messageID, userID)
+}
+
 // isMessageExpired checks if a message is too old to be edited
 func (mm *MessageManager) isMessageExpired(msg *ActiveMessage) bool {
 	return time.Since(msg.CreatedAt) > mm.messageTimeout

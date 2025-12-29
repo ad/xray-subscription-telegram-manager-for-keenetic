@@ -227,8 +227,24 @@ func (tb *TelegramBot) handleCallback(ctx context.Context, b *bot.Bot, update *m
 
 	tb.logger.Debug("User %d is authorized, processing callback: %s", userID, data)
 
-	// For callback queries, we'll send new messages instead of editing
-	// This avoids the complexity of handling MaybeInaccessibleMessage
+	// Determine message ID and Chat ID from the callback message to enable editing
+	var messageID int
+	var msgChatID int64
+	if update.CallbackQuery.Message.Message != nil {
+		messageID = update.CallbackQuery.Message.Message.ID
+		msgChatID = update.CallbackQuery.Message.Message.Chat.ID
+	} else if update.CallbackQuery.Message.InaccessibleMessage != nil {
+		messageID = update.CallbackQuery.Message.InaccessibleMessage.MessageID
+		msgChatID = update.CallbackQuery.Message.InaccessibleMessage.Chat.ID
+	}
+
+	// Update the active message in MessageManager to ensure we edit this message
+	// instead of sending a new one
+	if messageID != 0 && msgChatID != 0 {
+		tb.messageManager.SetActiveMessage(userID, msgChatID, messageID)
+		tb.logger.Debug("Set active message %d for user %d from callback", messageID, userID)
+	}
+
 	chatID := update.CallbackQuery.From.ID
 
 	switch {

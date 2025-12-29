@@ -147,9 +147,22 @@ func (xc *XrayController) IsServiceRunning() (bool, error) {
 		return false, fmt.Errorf("xray status check timed out")
 	}
 
-	return err == nil, nil
-} // GetCurrentConfig reads and parses the current xray configuration (thread-safe)
+	// Check for exit code 127 which means running
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		if exitErr.ExitCode() == 127 {
+			return true, nil
+		}
+	}
 
+	// Exit code 0 means stopped
+	if err == nil {
+		return false, nil
+	}
+
+	return false, err
+}
+
+// GetCurrentConfig reads and parses the current xray configuration (thread-safe)
 func (xc *XrayController) GetCurrentConfig() (*types.XrayConfig, error) {
 	xc.mutex.Lock()
 	defer xc.mutex.Unlock()
